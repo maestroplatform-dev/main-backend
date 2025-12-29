@@ -92,6 +92,26 @@ const response = await fetch('http://localhost:4000/api/v1/protected-route', {
 })
 ```
 
+## 🔒 Admin creation
+
+To prevent unauthorized admin creation, the server requires an environment secret `ADMIN_CREATION_SECRET`.
+
+When creating a profile with role `admin`, include the header `X-Admin-Secret: <secret>` matching the server env. Example curl:
+
+```bash
+curl -H "Authorization: Bearer <token>" \
+  -H "X-Admin-Secret: $ADMIN_CREATION_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{"role":"admin"}' \
+  http://localhost:4000/api/v1/auth/register
+```
+
+Set `ADMIN_CREATION_SECRET` in your `.env` (do not commit `.env`):
+
+```env
+ADMIN_CREATION_SECRET=your-very-secret-value
+```
+
 ## 🌐 CORS Configuration
 
 Update `ALLOWED_ORIGINS` in `.env` to allow your frontend:

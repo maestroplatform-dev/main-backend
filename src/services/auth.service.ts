@@ -1,6 +1,8 @@
 import { supabase } from '../config/supabase'
 import prisma from '../config/database'
 import { AppError } from '../types'
+import logger from '../utils/logger'
+import { randomUUID } from 'crypto'
 
 export class AuthService {
   // Validate Supabase token and get user
@@ -18,7 +20,7 @@ export class AuthService {
   }
 
   // Register user - create profile
-  static async register(userId: string, email: string, role: string) {
+  static async register(userId: string, email: string, name: string, role: string) {
     // Check if profile already exists
     const existing = await prisma.profiles.findUnique({
       where: { id: userId },
@@ -32,6 +34,7 @@ export class AuthService {
     const profile = await prisma.profiles.create({
       data: {
         id: userId,
+        name,
         role,
         is_active: true,
       },
@@ -42,6 +45,7 @@ export class AuthService {
       await prisma.teachers.create({
         data: {
           id: userId,
+            name,
           verified: false,
         },
       })
@@ -52,11 +56,35 @@ export class AuthService {
       await prisma.students.create({
         data: {
           id: userId,
+            name,
         },
       })
     }
 
-    return { profile, email }
+    // Audit log for admin creation
+    if (role === 'admin') {
+      try {
+        const auditId = randomUUID()
+        await prisma.audit_log_entries.create({
+          data: {
+            id: auditId,
+            instance_id: null,
+            payload: {
+              action: 'create_admin',
+              userId,
+              email,
+              timestamp: new Date().toISOString(),
+            },
+            ip_address: '',
+          },
+        })
+      } catch (e) {
+        // Log but do not block creation on audit failures
+        logger.error('Failed to write admin audit log')
+      }
+    }
+
+    return { profile, email, name }
   }
 
   // Get current user profile

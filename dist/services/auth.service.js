@@ -41,6 +41,7 @@ class AuthService {
             await database_1.default.teachers.create({
                 data: {
                     id: userId,
+                    name,
                     verified: false,
                 },
             });
@@ -50,6 +51,7 @@ class AuthService {
             await database_1.default.students.create({
                 data: {
                     id: userId,
+                    name,
                 },
             });
         }

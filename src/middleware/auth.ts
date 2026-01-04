@@ -1,5 +1,5 @@
 import { Response, NextFunction } from 'express'
-import { supabase } from '../config/supabase'
+import { supabaseAdmin } from '../config/supabase'
 import prisma from '../config/database'
 import { AuthRequest, AppError } from '../types'
 
@@ -21,7 +21,7 @@ export async function validateSupabaseToken(
     const {
       data: { user },
       error,
-    } = await supabase.auth.getUser(token)
+    } = await supabaseAdmin.auth.getUser(token)
 
     if (error || !user) {
       throw new AppError(401, 'Invalid token', 'INVALID_TOKEN')
@@ -51,7 +51,7 @@ export async function authenticateUser(
     const {
       data: { user },
       error,
-    } = await supabase.auth.getUser(token)
+    } = await supabaseAdmin.auth.getUser(token)
 
     if (error || !user) {
       throw new AppError(401, 'Invalid token', 'INVALID_TOKEN')

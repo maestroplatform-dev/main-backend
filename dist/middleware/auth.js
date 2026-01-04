@@ -17,7 +17,7 @@ async function validateSupabaseToken(req, res, next) {
             throw new types_1.AppError(401, 'Missing or invalid authorization header', 'UNAUTHORIZED');
         }
         const token = authHeader.substring(7);
-        const { data: { user }, error, } = await supabase_1.supabase.auth.getUser(token);
+        const { data: { user }, error, } = await supabase_1.supabaseAdmin.auth.getUser(token);
         if (error || !user) {
             throw new types_1.AppError(401, 'Invalid token', 'INVALID_TOKEN');
         }
@@ -35,7 +35,7 @@ async function authenticateUser(req, res, next) {
             throw new types_1.AppError(401, 'Missing or invalid authorization header', 'UNAUTHORIZED');
         }
         const token = authHeader.substring(7);
-        const { data: { user }, error, } = await supabase_1.supabase.auth.getUser(token);
+        const { data: { user }, error, } = await supabase_1.supabaseAdmin.auth.getUser(token);
         if (error || !user) {
             throw new types_1.AppError(401, 'Invalid token', 'INVALID_TOKEN');
         }

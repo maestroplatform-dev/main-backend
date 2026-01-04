@@ -11,7 +11,8 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
-    "create-teacher": "ts-node scripts/create-teacher.ts"
+    "create-teacher": "ts-node scripts/create-teacher.ts",
+    "create-admin": "ts-node scripts/create-admin.ts"
   },
   "repository": {
     "type": "git",

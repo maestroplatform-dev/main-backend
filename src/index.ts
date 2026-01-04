@@ -33,10 +33,13 @@ app.use(
       if (allowedOrigins.includes(origin)) {
         callback(null, true)
       } else {
-        callback(new Error('Not allowed by CORS'))
+        logger.warn({ origin, allowedOrigins }, 'CORS: Origin not allowed')
+        callback(null, false) // Don't throw error, just deny
       }
     },
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-admin-secret'],
   })
 )
 

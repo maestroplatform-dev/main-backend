@@ -9,6 +9,7 @@ dotenv_1.default.config();
 const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
 const helmet_1 = __importDefault(require("helmet"));
+const logger_1 = __importDefault(require("./utils/logger"));
 const routes_1 = __importDefault(require("./routes"));
 const errorHandler_1 = require("./middleware/errorHandler");
 const rateLimiter_1 = require("./middleware/rateLimiter");
@@ -32,10 +33,13 @@ app.use((0, cors_1.default)({
             callback(null, true);
         }
         else {
-            callback(new Error('Not allowed by CORS'));
+            logger_1.default.warn({ origin, allowedOrigins }, 'CORS: Origin not allowed');
+            callback(null, false); // Don't throw error, just deny
         }
     },
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-admin-secret'],
 }));
 // Body parsing middleware
 app.use(express_1.default.json({ limit: '10mb' }));

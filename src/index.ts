@@ -9,6 +9,7 @@ import logger from './utils/logger'
 import routes from './routes'
 import { errorHandler, notFoundHandler } from './middleware/errorHandler'
 import { apiLimiter } from './middleware/rateLimiter'
+import requestLogger from './middleware/requestLogger'
 
 const app: Application = express()
 const PORT = process.env.PORT || 4000
@@ -32,10 +33,13 @@ app.use(
       if (allowedOrigins.includes(origin)) {
         callback(null, true)
       } else {
-        callback(new Error('Not allowed by CORS'))
+        logger.warn({ origin, allowedOrigins }, 'CORS: Origin not allowed')
+        callback(null, false) // Don't throw error, just deny
       }
     },
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-admin-secret'],
   })
 )
 
@@ -46,12 +50,8 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }))
 // Rate limiting
 app.use(apiLimiter)
 
-// Request logging
-app.use((req, _res, next) => {
-  const timestamp = new Date().toLocaleTimeString()
-  console.log(`\n📡 [${timestamp}] ${req.method} ${req.path}`)
-  next()
-})
+// Request logging (structured)
+app.use(requestLogger)
 
 // Routes
 app.use(routes)

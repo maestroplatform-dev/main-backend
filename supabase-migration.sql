@@ -1,7 +1,4 @@
--- Create missing tables for Maestra platform
--- Run this in Supabase SQL Editor
 
--- Class Packages
 CREATE TABLE IF NOT EXISTS public.class_packages (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   teacher_id UUID NOT NULL REFERENCES public.teachers(id) ON DELETE CASCADE,
@@ -15,7 +12,6 @@ CREATE TABLE IF NOT EXISTS public.class_packages (
   updated_at TIMESTAMPTZ(6) DEFAULT NOW()
 );
 
--- Purchased Packages
 CREATE TABLE IF NOT EXISTS public.purchased_packages (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   student_id UUID NOT NULL REFERENCES public.students(id) ON DELETE CASCADE,
@@ -28,7 +24,6 @@ CREATE TABLE IF NOT EXISTS public.purchased_packages (
   status TEXT DEFAULT 'active'
 );
 
--- Bookings
 CREATE TABLE IF NOT EXISTS public.bookings (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   student_id UUID NOT NULL REFERENCES public.students(id) ON DELETE CASCADE,
@@ -44,8 +39,9 @@ CREATE TABLE IF NOT EXISTS public.bookings (
   created_at TIMESTAMPTZ(6) DEFAULT NOW(),
   updated_at TIMESTAMPTZ(6) DEFAULT NOW()
 );
+-- Add name to public.profiles if missing
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS name text;
 
--- Teacher Availability
 CREATE TABLE IF NOT EXISTS public.teacher_availability (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   teacher_id UUID NOT NULL REFERENCES public.teachers(id) ON DELETE CASCADE,
@@ -55,7 +51,6 @@ CREATE TABLE IF NOT EXISTS public.teacher_availability (
   is_recurring BOOLEAN DEFAULT true
 );
 
--- Payments
 CREATE TABLE IF NOT EXISTS public.payments (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL,
@@ -68,7 +63,6 @@ CREATE TABLE IF NOT EXISTS public.payments (
   created_at TIMESTAMPTZ(6) DEFAULT NOW()
 );
 
--- Reviews
 CREATE TABLE IF NOT EXISTS public.reviews (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   student_id UUID NOT NULL REFERENCES public.students(id) ON DELETE CASCADE,
@@ -79,7 +73,6 @@ CREATE TABLE IF NOT EXISTS public.reviews (
   created_at TIMESTAMPTZ(6) DEFAULT NOW()
 );
 
--- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_class_packages_teacher ON public.class_packages(teacher_id);
 CREATE INDEX IF NOT EXISTS idx_purchased_packages_student ON public.purchased_packages(student_id);
 CREATE INDEX IF NOT EXISTS idx_bookings_student ON public.bookings(student_id);

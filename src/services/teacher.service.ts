@@ -40,6 +40,10 @@ export class TeacherService {
         class_packages: {
           where: { is_active: true },
         },
+        teacher_instruments: true,
+        teacher_languages: true,
+        teacher_formats: true,
+        teacher_engagements: true,
         reviews: {
           include: {
             students: {
@@ -99,6 +103,9 @@ export class TeacherService {
         class_packages: {
           where: { is_active: true },
         },
+        teacher_instruments: true,
+        teacher_languages: true,
+        teacher_formats: true,
       },
       take: filters?.limit || 20,
       skip: filters?.offset || 0,

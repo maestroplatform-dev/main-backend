@@ -473,6 +473,7 @@ model payments {
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model profiles {
   id         String    @id @db.Uuid
+  name       String?
   role       String
   is_active  Boolean?  @default(true)
   created_at DateTime? @default(now()) @db.Timestamptz(6)
@@ -522,6 +523,7 @@ model reviews {
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model students {
   id                 String               @id @db.Uuid
+  name               String?
   created_at         DateTime?            @default(now()) @db.Timestamptz(6)
   bookings           bookings[]
   purchased_packages purchased_packages[]
@@ -546,17 +548,98 @@ model teacher_availability {
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model teachers {
-  id                   String                 @id @db.Uuid
-  bio                  String?
-  experience_years     Int?
-  verified             Boolean?               @default(false)
-  created_at           DateTime?              @default(now()) @db.Timestamptz(6)
-  bookings             bookings[]
-  class_packages       class_packages[]
-  reviews              reviews[]
-  teacher_availability teacher_availability[]
-  profiles             profiles               @relation(fields: [id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  id                           String                 @id @db.Uuid
+  name                         String?
+  bio                          String?
+  experience_years             Int?
+  phone                        String?
+  date_of_birth                DateTime?              @db.Date
+  music_experience_years       Int?
+  teaching_experience_years    Int?
+  performance_experience_years Int?
+  current_city                 String?
+  pincode                      String?
+  demo_session_available       Boolean?               @default(false)
+  media_consent                Boolean?               @default(false)
+  engagement_type              String? // "Teaching", "Performance", "Both"
+  international_premium        Decimal?               @db.Decimal(10, 2)
+  open_to_international        Boolean?               @default(false)
+  onboarding_completed         Boolean?               @default(false)
+  verified                     Boolean?               @default(false)
+  created_at                   DateTime?              @default(now()) @db.Timestamptz(6)
+  updated_at                   DateTime?              @default(now()) @db.Timestamptz(6)
+  bookings                     bookings[]
+  class_packages               class_packages[]
+  reviews                      reviews[]
+  teacher_availability         teacher_availability[]
+  teacher_languages            teacher_languages[]
+  teacher_instruments          teacher_instruments[]
+  teacher_engagements          teacher_engagements?
+  teacher_formats              teacher_formats?
+  profiles                     profiles               @relation(fields: [id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
+  @@index([onboarding_completed])
+  @@schema("public")
+}
+
+/// Languages taught by teacher
+model teacher_languages {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  teacher_id String   @db.Uuid
+  language   String
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  teachers   teachers @relation(fields: [teacher_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([teacher_id])
+  @@schema("public")
+}
+
+/// Engagement preferences (Teaching/Performance/Both + collaborative projects)
+model teacher_engagements {
+  id                     String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  teacher_id             String   @unique @db.Uuid
+  engagement_type        String // "Teaching", "Performance", "Both"
+  collaborative_projects String[] // ["Orchestra", "Theatre", "Choirs", "Ensembles", "Others"]
+  collaborative_other    String?
+  created_at             DateTime @default(now()) @db.Timestamptz(6)
+  updated_at             DateTime @default(now()) @db.Timestamptz(6)
+  teachers               teachers @relation(fields: [teacher_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@schema("public")
+}
+
+/// Teaching formats and specializations
+model teacher_formats {
+  id                       String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  teacher_id               String   @unique @db.Uuid
+  class_formats            String[] // ["Individual Online", "Individual Student Place", "Individual Teacher Place", "Group Online", "Group Teacher Place"]
+  class_formats_other      String?
+  exam_training            String[] // ["Trinity", "ABRSM", "Rockschool", "NTB", "Others"]
+  exam_training_other      String?
+  additional_formats       String[] // ["Certificate Courses", "Masterclass", "Workshops", "Teach Academies", "International Online", "Institutions"]
+  additional_formats_other String?
+  learner_groups           String[] // ["Children", "Senior Citizen", "Specially Abled", "Others"]
+  learner_groups_other     String?
+  other_contribution       String?
+  created_at               DateTime @default(now()) @db.Timestamptz(6)
+  updated_at               DateTime @default(now()) @db.Timestamptz(6)
+  teachers                 teachers @relation(fields: [teacher_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@schema("public")
+}
+
+/// Instruments with pricing and modes
+model teacher_instruments {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  teacher_id       String   @db.Uuid
+  instrument       String
+  teach_or_perform String // "Teach" or "Perform"
+  base_price       Decimal? @db.Decimal(10, 2)
+  created_at       DateTime @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime @default(now()) @db.Timestamptz(6)
+  teachers         teachers @relation(fields: [teacher_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([teacher_id])
   @@schema("public")
 }
 

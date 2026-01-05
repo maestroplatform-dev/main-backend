@@ -1,15 +1,30 @@
 import { Router } from 'express'
 import { TeacherController } from '../controllers/teacher.controller'
+import { TeacherOnboardingController } from '../controllers/teacher-onboarding.controller'
 import { authenticateUser, requireRole } from '../middleware/auth'
 import { asyncHandler } from '../utils/asyncHandler'
 
 const router = Router()
 
-// Public routes
-router.get('/', asyncHandler(TeacherController.getAllTeachers))
-router.get('/:id', asyncHandler(TeacherController.getTeacherById))
+// Protected routes (require authentication + teacher role)
+// Specific routes must come BEFORE dynamic :id routes
 
-// Protected routes (require authentication)
+// Onboarding endpoints (specific routes first)
+router.post(
+  '/onboarding',
+  authenticateUser,
+  requireRole('teacher'),
+  asyncHandler(TeacherOnboardingController.completeOnboarding)
+)
+
+router.get(
+  '/onboarding',
+  authenticateUser,
+  requireRole('teacher'),
+  asyncHandler(TeacherOnboardingController.getOnboardingData)
+)
+
+// Old onboarding route (kept for compatibility)
 router.post(
   '/onboard',
   authenticateUser,
@@ -17,6 +32,7 @@ router.post(
   asyncHandler(TeacherController.onboard)
 )
 
+// Profile routes
 router.get(
   '/profile/me',
   authenticateUser,
@@ -30,5 +46,9 @@ router.put(
   requireRole('teacher'),
   asyncHandler(TeacherController.updateProfile)
 )
+
+// Public routes (must come LAST - after all protected routes)
+router.get('/', asyncHandler(TeacherController.getAllTeachers))
+router.get('/:id', asyncHandler(TeacherController.getTeacherById))
 
 export default router

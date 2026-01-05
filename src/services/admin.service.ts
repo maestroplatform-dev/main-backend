@@ -1,5 +1,9 @@
 import prisma from '../config/database'
+import { supabaseAdmin } from '../config/supabase'
 import { AppError } from '../types'
+import { AdminRegisterTeacherInput } from '../utils/validation'
+import { generateSecurePassword, sendTeacherCredentialsEmail } from '../utils/email'
+import { Prisma } from '@prisma/client'
 
 export class AdminService {
   // Get dashboard statistics
@@ -308,6 +312,135 @@ export class AdminService {
         total,
         totalPages: Math.ceil(total / limit),
       },
+    }
+  }
+
+  // Admin: Register teacher with complete onboarding data
+  static async registerTeacher(data: AdminRegisterTeacherInput) {
+    // Check if user with this email already exists
+    const { data: existingUser } = await supabaseAdmin.auth.admin.listUsers()
+    const userExists = existingUser?.users.some(u => u.email === data.email)
+
+    if (userExists) {
+      throw new AppError(409, 'User with this email already exists', 'USER_EXISTS')
+    }
+
+    // Generate secure password
+    const password = generateSecurePassword()
+
+    // Create user in Supabase Auth
+    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+      email: data.email,
+      password,
+      email_confirm: true,
+    })
+
+    if (authError || !authData.user) {
+      throw new AppError(500, `Failed to create user: ${authError?.message || 'Unknown error'}`, 'AUTH_USER_CREATION_FAILED')
+    }
+
+    const userId = authData.user.id
+
+    try {
+      // Create profile in backend
+      const profile = await prisma.profiles.create({
+        data: {
+          id: userId,
+          name: data.name,
+          role: 'teacher',
+          is_active: true,
+        },
+      })
+
+      // Create teacher record with full onboarding data
+      const teacher = await prisma.teachers.create({
+        data: {
+          id: userId,
+          name: data.name,
+          verified: false,
+          phone: data.phone,
+          date_of_birth: data.date_of_birth ? new Date(data.date_of_birth) : null,
+          music_experience_years: data.music_experience_years,
+          teaching_experience_years: data.teaching_experience_years,
+          performance_experience_years: data.performance_experience_years,
+          current_city: data.current_city,
+          pincode: data.pincode,
+          demo_session_available: data.demo_session_available,
+          media_consent: data.media_consent,
+          engagement_type: data.engagement_type,
+          international_premium: data.international_premium ? new Prisma.Decimal(data.international_premium) : null,
+          open_to_international: data.open_to_international,
+          onboarding_completed: true, // Mark as onboarded since admin filled everything
+        },
+      })
+
+      // Create teacher instruments
+      if (data.instruments && data.instruments.length > 0) {
+        await prisma.teacher_instruments.createMany({
+          data: data.instruments.map(inst => ({
+            teacher_id: userId,
+            instrument: inst.instrument,
+            teach_or_perform: inst.teach_or_perform,
+            base_price: inst.base_price ? new Prisma.Decimal(inst.base_price) : null,
+          })),
+        })
+      }
+
+      // Create teacher languages
+      if (data.languages && data.languages.length > 0) {
+        await prisma.teacher_languages.createMany({
+          data: data.languages.map(lang => ({
+            teacher_id: userId,
+            language: lang,
+          })),
+        })
+      }
+
+      // Create teacher formats (single record with array fields)
+      if (data.class_formats && data.class_formats.length > 0) {
+        await prisma.teacher_formats.create({
+          data: {
+            teacher_id: userId,
+            class_formats: data.class_formats,
+            class_formats_other: data.class_formats_other || null,
+            exam_training: data.exam_training || [],
+            exam_training_other: data.exam_training_other || null,
+            additional_formats: data.additional_formats || [],
+            additional_formats_other: data.additional_formats_other || null,
+            learner_groups: data.learner_groups,
+            learner_groups_other: data.learner_groups_other || null,
+            other_contribution: data.other_contribution || null,
+          },
+        })
+      }
+
+      // Create teacher engagement preferences (single record)
+      if (data.engagement_type) {
+        await prisma.teacher_engagements.create({
+          data: {
+            teacher_id: userId,
+            engagement_type: data.engagement_type,
+            collaborative_projects: data.collaborative_projects || [],
+            collaborative_other: data.collaborative_other || null,
+          },
+        })
+      }
+
+      // Send credentials email to teacher
+      await sendTeacherCredentialsEmail(data.email, password, data.name)
+
+      return {
+        profile,
+        teacher,
+        credentials: {
+          email: data.email,
+          password,
+        },
+      }
+    } catch (error) {
+      // Rollback Supabase user creation if database operations fail
+      await supabaseAdmin.auth.admin.deleteUser(userId)
+      throw error
     }
   }
 }

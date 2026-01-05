@@ -9,11 +9,13 @@ dotenv_1.default.config();
 const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
 const helmet_1 = __importDefault(require("helmet"));
+const node_cron_1 = __importDefault(require("node-cron"));
 const logger_1 = __importDefault(require("./utils/logger"));
 const routes_1 = __importDefault(require("./routes"));
 const errorHandler_1 = require("./middleware/errorHandler");
 const rateLimiter_1 = require("./middleware/rateLimiter");
 const requestLogger_1 = __importDefault(require("./middleware/requestLogger"));
+const email_1 = require("./utils/email");
 const app = (0, express_1.default)();
 const PORT = process.env.PORT || 4000;
 // Security middleware
@@ -67,6 +69,20 @@ app.listen(PORT, () => {
     console.log(`    GET  /health`);
     console.log(`    GET  /api/v1/test`);
     console.log('='.repeat(60) + '\n');
+    // Start email queue processor (runs every 5 minutes)
+    node_cron_1.default.schedule('*/5 * * * *', async () => {
+        console.log('📬 Email queue processor triggered...');
+        try {
+            const result = await (0, email_1.processEmailQueue)();
+            if (result.sent > 0 || result.failed > 0) {
+                console.log(`📊 Queue processed: ${result.sent} sent, ${result.failed} failed`);
+            }
+        }
+        catch (error) {
+            console.error('❌ Email queue processing error:', error);
+        }
+    });
+    console.log('📬 Email queue processor scheduled (every 5 minutes)\n');
 });
 // Graceful shutdown
 process.on('SIGTERM', () => {

@@ -7,5 +7,7 @@ export declare class AdminController {
     static listUsers(req: AuthRequest, res: Response): Promise<void>;
     static updateUserStatus(req: AuthRequest, res: Response): Promise<void>;
     static getAuditLogs(req: AuthRequest, res: Response): Promise<void>;
+    static registerTeacher(req: AuthRequest, res: Response): Promise<void>;
+    static processEmailQueue(_req: AuthRequest, res: Response): Promise<void>;
 }
 //# sourceMappingURL=admin.controller.d.ts.map

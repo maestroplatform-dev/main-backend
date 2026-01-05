@@ -1,3 +1,5 @@
+import { AdminRegisterTeacherInput } from '../utils/validation';
+import { Prisma } from '@prisma/client';
 export declare class AdminService {
     static getDashboardStats(): Promise<{
         users: {
@@ -18,7 +20,7 @@ export declare class AdminService {
             completionRate: number;
         };
         revenue: {
-            total: number | import("@prisma/client-runtime-utils").Decimal;
+            total: number | Prisma.Decimal;
         };
     }>;
     static getTeachers(params: {
@@ -41,8 +43,11 @@ export declare class AdminService {
             teacher_instruments: {
                 instrument: string;
                 teach_or_perform: string;
-                base_price: import("@prisma/client-runtime-utils").Decimal | null;
+                base_price: Prisma.Decimal | null;
             }[];
+            teacher_formats: {
+                class_formats: string[];
+            } | null;
             _count: {
                 bookings: number;
                 reviews: number;
@@ -62,7 +67,7 @@ export declare class AdminService {
             demo_session_available: boolean | null;
             media_consent: boolean | null;
             engagement_type: string | null;
-            international_premium: import("@prisma/client-runtime-utils").Decimal | null;
+            international_premium: Prisma.Decimal | null;
             open_to_international: boolean | null;
             onboarding_completed: boolean | null;
             verified: boolean | null;
@@ -99,7 +104,7 @@ export declare class AdminService {
         demo_session_available: boolean | null;
         media_consent: boolean | null;
         engagement_type: string | null;
-        international_premium: import("@prisma/client-runtime-utils").Decimal | null;
+        international_premium: Prisma.Decimal | null;
         open_to_international: boolean | null;
         onboarding_completed: boolean | null;
         verified: boolean | null;
@@ -154,7 +159,7 @@ export declare class AdminService {
             id: string;
             created_at: Date | null;
             instance_id: string | null;
-            payload: import("@prisma/client/runtime/client").JsonValue | null;
+            payload: Prisma.JsonValue | null;
             ip_address: string;
         }[];
         pagination: {
@@ -162,6 +167,41 @@ export declare class AdminService {
             limit: number;
             total: number;
             totalPages: number;
+        };
+    }>;
+    static registerTeacher(data: AdminRegisterTeacherInput): Promise<{
+        profile: {
+            id: string;
+            name: string | null;
+            role: string;
+            is_active: boolean | null;
+            created_at: Date | null;
+        };
+        teacher: {
+            id: string;
+            name: string | null;
+            created_at: Date | null;
+            bio: string | null;
+            experience_years: number | null;
+            phone: string | null;
+            date_of_birth: Date | null;
+            music_experience_years: number | null;
+            teaching_experience_years: number | null;
+            performance_experience_years: number | null;
+            current_city: string | null;
+            pincode: string | null;
+            demo_session_available: boolean | null;
+            media_consent: boolean | null;
+            engagement_type: string | null;
+            international_premium: Prisma.Decimal | null;
+            open_to_international: boolean | null;
+            onboarding_completed: boolean | null;
+            verified: boolean | null;
+            updated_at: Date | null;
+        };
+        credentials: {
+            email: string;
+            password: string;
         };
     }>;
 }

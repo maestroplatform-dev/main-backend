@@ -712,3 +712,21 @@ enum one_time_token_type {
 
   @@schema("auth")
 }
+
+/// Email queue for failed email attempts - will retry when service is available
+model email_queue {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  to_email     String
+  subject      String
+  html_content String
+  template_data Json?     // Store any template variables for regeneration
+  status       String    @default("pending") // pending, sent, failed
+  attempts     Int       @default(0)
+  last_attempt DateTime?
+  error_message String?
+  created_at   DateTime  @default(now()) @db.Timestamptz(6)
+  sent_at      DateTime? @db.Timestamptz(6)
+
+  @@index([status, created_at])
+  @@schema("public")
+}

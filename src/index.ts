@@ -5,11 +5,13 @@ dotenv.config()
 import express, { Application } from 'express'
 import cors from 'cors'
 import helmet from 'helmet'
+import cron from 'node-cron'
 import logger from './utils/logger'
 import routes from './routes'
 import { errorHandler, notFoundHandler } from './middleware/errorHandler'
 import { apiLimiter } from './middleware/rateLimiter'
 import requestLogger from './middleware/requestLogger'
+import { processEmailQueue } from './utils/email'
 
 const app: Application = express()
 const PORT = process.env.PORT || 4000
@@ -74,6 +76,20 @@ app.listen(PORT, () => {
   console.log(`    GET  /health`)
   console.log(`    GET  /api/v1/test`)
   console.log('='.repeat(60) + '\n')
+
+  // Start email queue processor (runs every 5 minutes)
+  cron.schedule('*/5 * * * *', async () => {
+    console.log('📬 Email queue processor triggered...')
+    try {
+      const result = await processEmailQueue()
+      if (result.sent > 0 || result.failed > 0) {
+        console.log(`📊 Queue processed: ${result.sent} sent, ${result.failed} failed`)
+      }
+    } catch (error) {
+      console.error('❌ Email queue processing error:', error)
+    }
+  })
+  console.log('📬 Email queue processor scheduled (every 5 minutes)\n')
 })
 
 // Graceful shutdown

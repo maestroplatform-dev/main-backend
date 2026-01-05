@@ -2,6 +2,8 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AdminController = void 0;
 const admin_service_1 = require("../services/admin.service");
+const validation_1 = require("../utils/validation");
+const email_1 = require("../utils/email");
 class AdminController {
     // GET /api/v1/admin/stats - Dashboard statistics
     static async getDashboardStats(_req, res) {
@@ -73,6 +75,33 @@ class AdminController {
             success: true,
             data: result.logs,
             meta: result.pagination,
+        });
+    }
+    // POST /api/v1/admin/teachers/register - Register teacher on behalf (admin only)
+    static async registerTeacher(req, res) {
+        const data = validation_1.adminRegisterTeacherSchema.parse(req.body);
+        const result = await admin_service_1.AdminService.registerTeacher(data);
+        res.status(201).json({
+            success: true,
+            data: {
+                message: 'Teacher registered successfully',
+                profile: result.profile,
+                teacher: result.teacher,
+                credentials: {
+                    email: result.credentials.email,
+                    password: result.credentials.password,
+                    note: 'Send these credentials to the teacher via secure channel',
+                },
+            },
+        });
+    }
+    // POST /api/v1/admin/emails/process-queue - Process queued emails
+    static async processEmailQueue(_req, res) {
+        const result = await (0, email_1.processEmailQueue)();
+        res.json({
+            success: true,
+            data: result,
+            message: `Processed email queue: ${result.sent} sent, ${result.failed} failed`,
         });
     }
 }

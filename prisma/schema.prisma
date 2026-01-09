@@ -634,12 +634,32 @@ model teacher_instruments {
   teacher_id       String   @db.Uuid
   instrument       String
   teach_or_perform String // "Teach" or "Perform"
+  class_mode       class_mode?
   base_price       Decimal? @db.Decimal(10, 2)
+  performance_fee_inr     Decimal? @db.Decimal(10, 2)
+  performance_fee_foreign Decimal? @db.Decimal(10, 2)
   created_at       DateTime @default(now()) @db.Timestamptz(6)
   updated_at       DateTime @default(now()) @db.Timestamptz(6)
   teachers         teachers @relation(fields: [teacher_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  teacher_instrument_tiers teacher_instrument_tiers[]
 
   @@index([teacher_id])
+  @@schema("public")
+}
+
+/// Per-level pricing for teaching instruments
+model teacher_instrument_tiers {
+  id                     String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  teacher_instrument_id  String            @db.Uuid
+  level                  instrument_level
+  mode                   class_mode
+  price_inr              Decimal           @db.Decimal(10, 2)
+  price_foreign          Decimal?          @db.Decimal(10, 2)
+  created_at             DateTime          @default(now()) @db.Timestamptz(6)
+  updated_at             DateTime          @default(now()) @db.Timestamptz(6)
+  teacher_instruments    teacher_instruments @relation(fields: [teacher_instrument_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([teacher_instrument_id])
   @@schema("public")
 }
 
@@ -671,6 +691,21 @@ enum factor_type {
   phone
 
   @@schema("auth")
+}
+
+enum instrument_level {
+  beginner
+  intermediate
+  advanced
+
+  @@schema("public")
+}
+
+enum class_mode {
+  online
+  offline
+
+  @@schema("public")
 }
 
 enum oauth_authorization_status {

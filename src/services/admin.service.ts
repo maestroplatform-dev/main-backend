@@ -1,7 +1,101 @@
 import prisma from '../config/database'
 import { AppError } from '../types'
+import { createClient } from '@supabase/supabase-js'
+import { TeacherOnboardingService } from './teacher-onboarding.service'
+import { AuthService } from './auth.service'
+import { z } from 'zod'
+import { teacherCompleteOnboardingSchema } from '../utils/validation'
+import { Resend } from 'resend'
+import logger from '../utils/logger'
+
+const resend = new Resend(process.env.RESEND_API_KEY)
+
+type TeacherOnboardingInput = z.infer<typeof teacherCompleteOnboardingSchema>
 
 export class AdminService {
+    // Register a new teacher as admin (creates user, profile, and onboards)
+    static async registerTeacher(
+      adminId: string,
+      data: TeacherOnboardingInput & { email: string; name: string }
+    ) {
+      // Initialize Supabase admin client
+      const supabase = createClient(
+        process.env.SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!
+      )
+
+      // Step 1: Create user in Supabase
+      const tempPassword = Math.random().toString(36).slice(-12)
+      const { data: signUpData, error: signUpError } = await supabase.auth.admin.createUser({
+        email: data.email,
+        password: tempPassword,
+        email_confirm: true,
+      })
+
+      if (signUpError) {
+        throw new AppError(400, signUpError.message, 'USER_CREATION_FAILED')
+      }
+
+      const teacherId = signUpData.user.id
+
+      // Step 2: Create profile in database
+      await AuthService.register(teacherId, data.email, data.name, 'teacher')
+
+      // Step 3: Complete teacher onboarding
+      const teacher = await TeacherOnboardingService.completeOnboarding(teacherId, data)
+
+      // Step 4: Send credentials email
+      try {
+        const teacherLoginUrl = process.env.TEACHER_LOGIN_URL || 'https://teacher.maestera.app/login'
+        const result = await resend.emails.send({
+          from: process.env.RESEND_FROM_EMAIL || 'noreply@maestera.com',
+          to: data.email,
+          subject: 'Your Maestera Teacher Account is Ready',
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <h2>Welcome to Maestera, ${data.name}!</h2>
+              <p>Your teacher account has been created and will be ready to use.</p>
+              
+              <h3>Login Credentials:</h3>
+              <p style="background: #f5f5f5; padding: 15px; border-radius: 5px;">
+                <strong>Email:</strong> ${data.email}<br/>
+                <strong>Password:</strong> ${tempPassword}
+              </p>
+              
+              <p style="margin-top: 20px;">
+                <a href="${teacherLoginUrl}" style="background: #DA2D2C; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">
+                  Login to Your Account
+                </a>
+              </p>
+              
+              <hr style="margin: 30px 0; border: none; border-top: 1px solid #ddd;">
+              <p style="font-size: 12px; color: #666;">
+                Please keep these credentials safe and change your password after first login.
+              </p>
+            </div>
+          `,
+        })
+        logger.info({ 
+          teacherId, 
+          email: data.email, 
+          resendId: result.data?.id,
+          resendError: result.error,
+          from: process.env.RESEND_FROM_EMAIL 
+        }, '✅ Credentials email sent')
+      } catch (emailError) {
+        logger.error({ teacherId, email: data.email, error: emailError }, '⚠️ Failed to send credentials email')
+        // Don't throw - let the registration succeed even if email fails
+      }
+
+      return {
+        credentials: {
+          email: data.email,
+          password: tempPassword,
+        },
+        teacher,
+      }
+    }
+
   // Get dashboard statistics
   static async getDashboardStats() {
     const [

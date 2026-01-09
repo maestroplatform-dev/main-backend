@@ -1,8 +1,33 @@
 import { Response } from 'express'
 import { AuthRequest } from '../types'
 import { AdminService } from '../services/admin.service'
+import { teacherCompleteOnboardingSchema } from '../utils/validation'
+import logger from '../utils/logger'
 
 export class AdminController {
+    // POST /api/v1/admin/teachers/register - Admin register a new teacher (creates user + profile + onboarding)
+    static async registerTeacher(req: AuthRequest, res: Response): Promise<void> {
+      logger.info({ adminId: req.user?.id, email: req.body.email }, '🔵 Admin registering new teacher...')
+
+      const data = teacherCompleteOnboardingSchema.extend({
+        email: require('zod').z.string().email('Invalid email'),
+        name: require('zod').z.string().min(1, 'Name is required'),
+      }).parse(req.body)
+
+      const result = await AdminService.registerTeacher(req.user!.id, data)
+
+      logger.info({ adminId: req.user?.id, teacherId: result.teacher.id }, '✅ Teacher registered by admin successfully')
+
+      res.status(201).json({
+        success: true,
+        data: {
+          message: 'Teacher registered successfully',
+          credentials: result.credentials,
+          teacher: result.teacher,
+        },
+      })
+    }
+
   // GET /api/v1/admin/stats - Dashboard statistics
   static async getDashboardStats(_req: AuthRequest, res: Response): Promise<void> {
     const stats = await AdminService.getDashboardStats()

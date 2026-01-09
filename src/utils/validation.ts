@@ -36,18 +36,34 @@ export const teacherCompleteOnboardingSchema = z.object({
   learner_groups_other: z.string().optional(),
   other_contribution: z.string().optional(),
 
-  // Step 4: Instruments & Pricing
+  // Step 4: Instruments & Pricing (Teach vs Perform)
   instruments: z
     .array(
-      z.object({
-        instrument: z.string().min(1),
-        teach_or_perform: z.enum(['Teach', 'Perform']),
-        base_price: z.number().positive().optional(),
-      })
+      z.discriminatedUnion('teach_or_perform', [
+        z.object({
+          teach_or_perform: z.literal('Teach'),
+          instrument: z.string().min(1),
+          class_mode: z.enum(['online', 'offline']),
+          tiers: z
+            .array(
+              z.object({
+                level: z.enum(['beginner', 'intermediate', 'advanced']),
+                price_inr: z.number().positive(),
+              })
+            )
+            .length(3, 'Provide beginner, intermediate, and advanced pricing'),
+        }),
+        z.object({
+          teach_or_perform: z.literal('Perform'),
+          instrument: z.string().min(1),
+          performance_fee_inr: z.number().positive(),
+        }),
+      ])
     )
     .min(1),
-  open_to_international: z.boolean(),
-  international_premium: z.number().nonnegative().optional(),
+
+  open_to_international: z.boolean().default(false),
+  international_premium: z.number().nonnegative().default(0),
 })
 
 // Old schemas (kept for compatibility)

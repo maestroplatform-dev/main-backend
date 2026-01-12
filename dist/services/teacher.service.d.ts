@@ -55,6 +55,15 @@ export declare class TeacherService {
                 id: string;
                 name: string | null;
                 created_at: Date | null;
+                date_of_birth: Date | null;
+                updated_at: Date | null;
+                gender: string | null;
+                profile_picture_url: string | null;
+                guardian_name: string | null;
+                guardian_phone: string | null;
+                signup_method: string;
+                email_verified: boolean;
+                onboarding_status: string;
             };
         } & {
             id: string;
@@ -71,15 +80,29 @@ export declare class TeacherService {
             teacher_id: string;
             language: string;
         }[];
-        teacher_instruments: {
+        teacher_instruments: ({
+            teacher_instrument_tiers: {
+                level: import(".prisma/client").$Enums.instrument_level;
+                id: string;
+                created_at: Date;
+                updated_at: Date;
+                price_inr: import("@prisma/client-runtime-utils").Decimal;
+                teacher_instrument_id: string;
+                mode: import(".prisma/client").$Enums.class_mode;
+                price_foreign: import("@prisma/client-runtime-utils").Decimal | null;
+            }[];
+        } & {
             id: string;
             created_at: Date;
             updated_at: Date;
-            instrument: string;
             teach_or_perform: string;
-            base_price: import("@prisma/client-runtime-utils").Decimal | null;
+            instrument: string;
+            class_mode: import(".prisma/client").$Enums.class_mode | null;
+            performance_fee_inr: import("@prisma/client-runtime-utils").Decimal | null;
             teacher_id: string;
-        }[];
+            base_price: import("@prisma/client-runtime-utils").Decimal | null;
+            performance_fee_foreign: import("@prisma/client-runtime-utils").Decimal | null;
+        })[];
         teacher_engagements: {
             id: string;
             created_at: Date;
@@ -178,15 +201,29 @@ export declare class TeacherService {
             teacher_id: string;
             language: string;
         }[];
-        teacher_instruments: {
+        teacher_instruments: ({
+            teacher_instrument_tiers: {
+                level: import(".prisma/client").$Enums.instrument_level;
+                id: string;
+                created_at: Date;
+                updated_at: Date;
+                price_inr: import("@prisma/client-runtime-utils").Decimal;
+                teacher_instrument_id: string;
+                mode: import(".prisma/client").$Enums.class_mode;
+                price_foreign: import("@prisma/client-runtime-utils").Decimal | null;
+            }[];
+        } & {
             id: string;
             created_at: Date;
             updated_at: Date;
-            instrument: string;
             teach_or_perform: string;
-            base_price: import("@prisma/client-runtime-utils").Decimal | null;
+            instrument: string;
+            class_mode: import(".prisma/client").$Enums.class_mode | null;
+            performance_fee_inr: import("@prisma/client-runtime-utils").Decimal | null;
             teacher_id: string;
-        }[];
+            base_price: import("@prisma/client-runtime-utils").Decimal | null;
+            performance_fee_foreign: import("@prisma/client-runtime-utils").Decimal | null;
+        })[];
         teacher_formats: {
             id: string;
             created_at: Date;

@@ -16,6 +16,15 @@ export declare class AuthService {
             id: string;
             name: string | null;
             created_at: Date | null;
+            date_of_birth: Date | null;
+            updated_at: Date | null;
+            gender: string | null;
+            profile_picture_url: string | null;
+            guardian_name: string | null;
+            guardian_phone: string | null;
+            signup_method: string;
+            email_verified: boolean;
+            onboarding_status: string;
         } | null;
         teachers: {
             id: string;

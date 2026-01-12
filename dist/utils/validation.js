@@ -1,12 +1,62 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.teacherProfileUpdateSchema = exports.teacherOnboardingSchema = exports.teacherCompleteOnboardingSchema = exports.registerSchema = void 0;
+exports.teacherProfileUpdateSchema = exports.teacherOnboardingSchema = exports.teacherCompleteOnboardingSchema = exports.studentUpdateProfilePictureSchema = exports.studentCompleteGoogleSignupSchema = exports.studentCompleteEmailSignupSchema = exports.studentResendOTPSchema = exports.studentVerifyOTPSchema = exports.studentSendOTPSchema = exports.registerSchema = void 0;
 const zod_1 = require("zod");
 // Auth validation schemas
 exports.registerSchema = zod_1.z.object({
     name: zod_1.z.string().min(1, 'Name is required').max(120),
     role: zod_1.z.enum(['student', 'teacher', 'admin']).default('student'),
 });
+// ============================================================
+// STUDENT SIGNUP SCHEMAS
+// ============================================================
+exports.studentSendOTPSchema = zod_1.z.object({
+    email: zod_1.z.string().email('Invalid email address'),
+});
+exports.studentVerifyOTPSchema = zod_1.z.object({
+    email: zod_1.z.string().email('Invalid email address'),
+    otp_code: zod_1.z.string().length(6, 'OTP must be 6 digits').regex(/^\d+$/, 'OTP must contain only numbers'),
+});
+exports.studentResendOTPSchema = zod_1.z.object({
+    email: zod_1.z.string().email('Invalid email address'),
+});
+exports.studentCompleteEmailSignupSchema = zod_1.z.object({
+    email: zod_1.z.string().email('Invalid email address'),
+    name: zod_1.z.string().min(2, 'Name must be at least 2 characters').max(120),
+    gender: zod_1.z.enum(['male', 'female', 'other']),
+    date_of_birth: zod_1.z.string().refine((date) => {
+        const dob = new Date(date);
+        const today = new Date();
+        return dob < today && dob.getFullYear() >= 1900;
+    }, 'Invalid date of birth'),
+    password: zod_1.z.string().min(8, 'Password must be at least 8 characters').regex(/[A-Z]/, 'Password must contain uppercase letter').regex(/[0-9]/, 'Password must contain a number'),
+    guardian_name: zod_1.z.string().optional(),
+    guardian_phone: zod_1.z
+        .string()
+        .regex(/^\d{10}$/, 'Phone must be 10 digits')
+        .optional(),
+});
+exports.studentCompleteGoogleSignupSchema = zod_1.z.object({
+    user_id: zod_1.z.string().uuid('Invalid user ID'),
+    gender: zod_1.z.enum(['male', 'female', 'other']),
+    date_of_birth: zod_1.z.string().refine((date) => {
+        const dob = new Date(date);
+        const today = new Date();
+        return dob < today && dob.getFullYear() >= 1900;
+    }, 'Invalid date of birth'),
+    google_picture_url: zod_1.z.string().url('Invalid picture URL').optional(),
+    guardian_name: zod_1.z.string().optional(),
+    guardian_phone: zod_1.z
+        .string()
+        .regex(/^\d{10}$/, 'Phone must be 10 digits')
+        .optional(),
+});
+exports.studentUpdateProfilePictureSchema = zod_1.z.object({
+    picture_url: zod_1.z.string().url('Invalid picture URL'),
+});
+// ============================================================
+// TEACHER ONBOARDING SCHEMAS (EXISTING)
+// ============================================================
 // Comprehensive Teacher Onboarding Schema (all steps in one)
 exports.teacherCompleteOnboardingSchema = zod_1.z.object({
     // Step 2: Basic Information
@@ -34,16 +84,29 @@ exports.teacherCompleteOnboardingSchema = zod_1.z.object({
     learner_groups: zod_1.z.array(zod_1.z.string()).min(1),
     learner_groups_other: zod_1.z.string().optional(),
     other_contribution: zod_1.z.string().optional(),
-    // Step 4: Instruments & Pricing
+    // Step 4: Instruments & Pricing (Teach vs Perform)
     instruments: zod_1.z
-        .array(zod_1.z.object({
-        instrument: zod_1.z.string().min(1),
-        teach_or_perform: zod_1.z.enum(['Teach', 'Perform']),
-        base_price: zod_1.z.number().positive().optional(),
-    }))
+        .array(zod_1.z.discriminatedUnion('teach_or_perform', [
+        zod_1.z.object({
+            teach_or_perform: zod_1.z.literal('Teach'),
+            instrument: zod_1.z.string().min(1),
+            class_mode: zod_1.z.enum(['online', 'offline']),
+            tiers: zod_1.z
+                .array(zod_1.z.object({
+                level: zod_1.z.enum(['beginner', 'intermediate', 'advanced']),
+                price_inr: zod_1.z.number().positive(),
+            }))
+                .length(3, 'Provide beginner, intermediate, and advanced pricing'),
+        }),
+        zod_1.z.object({
+            teach_or_perform: zod_1.z.literal('Perform'),
+            instrument: zod_1.z.string().min(1),
+            performance_fee_inr: zod_1.z.number().positive(),
+        }),
+    ]))
         .min(1),
-    open_to_international: zod_1.z.boolean(),
-    international_premium: zod_1.z.number().nonnegative().optional(),
+    open_to_international: zod_1.z.boolean().default(false),
+    international_premium: zod_1.z.number().nonnegative().default(0),
 });
 // Old schemas (kept for compatibility)
 exports.teacherOnboardingSchema = zod_1.z.object({

@@ -11,6 +11,7 @@ router.get('/stats', rateLimiter_1.apiLimiter, auth_1.authenticateUser, (0, auth
 // Teacher management
 router.get('/teachers', rateLimiter_1.apiLimiter, auth_1.authenticateUser, (0, auth_1.requireRole)('admin'), (0, asyncHandler_1.asyncHandler)(admin_controller_1.AdminController.listTeachers));
 router.patch('/teachers/:id/verify', rateLimiter_1.apiLimiter, auth_1.authenticateUser, (0, auth_1.requireRole)('admin'), (0, asyncHandler_1.asyncHandler)(admin_controller_1.AdminController.updateTeacherVerification));
+router.post('/teachers/register', rateLimiter_1.apiLimiter, auth_1.authenticateUser, (0, auth_1.requireRole)('admin'), (0, asyncHandler_1.asyncHandler)(admin_controller_1.AdminController.registerTeacher));
 // User management
 router.get('/users', rateLimiter_1.apiLimiter, auth_1.authenticateUser, (0, auth_1.requireRole)('admin'), (0, asyncHandler_1.asyncHandler)(admin_controller_1.AdminController.listUsers));
 router.patch('/users/:id/status', rateLimiter_1.apiLimiter, auth_1.authenticateUser, (0, auth_1.requireRole)('admin'), (0, asyncHandler_1.asyncHandler)(admin_controller_1.AdminController.updateUserStatus));

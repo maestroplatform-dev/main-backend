@@ -51,11 +51,13 @@ export class TeacherOnboardingService {
             engagement_type: data.engagement_type,
             collaborative_projects: data.collaborative_projects,
             collaborative_other: data.collaborative_other,
+            performance_fee_per_hour: data.performance_fee_per_hour,
           },
           update: {
             engagement_type: data.engagement_type,
             collaborative_projects: data.collaborative_projects,
             collaborative_other: data.collaborative_other,
+            performance_fee_per_hour: data.performance_fee_per_hour,
           },
         })
 
@@ -72,6 +74,8 @@ export class TeacherOnboardingService {
             additional_formats_other: data.additional_formats_other,
             learner_groups: data.learner_groups,
             learner_groups_other: data.learner_groups_other,
+            performance_settings: data.performance_settings,
+            performance_settings_other: data.performance_settings_other,
             other_contribution: data.other_contribution,
           },
           update: {
@@ -83,6 +87,8 @@ export class TeacherOnboardingService {
             additional_formats_other: data.additional_formats_other,
             learner_groups: data.learner_groups,
             learner_groups_other: data.learner_groups_other,
+            performance_settings: data.performance_settings,
+            performance_settings_other: data.performance_settings_other,
             other_contribution: data.other_contribution,
           },
         })

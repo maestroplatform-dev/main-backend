@@ -54,6 +54,17 @@ export class AdminController {
     })
   }
 
+    // GET /api/v1/admin/teachers/:id - Get detailed teacher information
+    static async getTeacherDetails(req: AuthRequest, res: Response): Promise<void> {
+      const { id } = req.params
+      const teacher = await AdminService.getTeacherDetails(id)
+    
+      res.json({
+        success: true,
+        data: teacher,
+      })
+    }
+
   // PATCH /api/v1/admin/teachers/:id/verify - Verify/Unverify teacher
   static async updateTeacherVerification(req: AuthRequest, res: Response): Promise<void> {
     const { id } = req.params

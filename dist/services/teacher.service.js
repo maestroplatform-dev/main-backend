@@ -39,10 +39,14 @@ class TeacherService {
                 class_packages: {
                     where: { is_active: true },
                 },
-                teacher_instruments: true,
                 teacher_languages: true,
                 teacher_formats: true,
                 teacher_engagements: true,
+                teacher_instruments: {
+                    include: {
+                        teacher_instrument_tiers: true,
+                    },
+                },
                 reviews: {
                     include: {
                         students: {
@@ -91,9 +95,13 @@ class TeacherService {
                 class_packages: {
                     where: { is_active: true },
                 },
-                teacher_instruments: true,
                 teacher_languages: true,
                 teacher_formats: true,
+                teacher_instruments: {
+                    include: {
+                        teacher_instrument_tiers: true,
+                    },
+                },
             },
             take: filters?.limit || 20,
             skip: filters?.offset || 0,

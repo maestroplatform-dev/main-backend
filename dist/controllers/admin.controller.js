@@ -1,8 +1,31 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AdminController = void 0;
 const admin_service_1 = require("../services/admin.service");
+const validation_1 = require("../utils/validation");
+const logger_1 = __importDefault(require("../utils/logger"));
 class AdminController {
+    // POST /api/v1/admin/teachers/register - Admin register a new teacher (creates user + profile + onboarding)
+    static async registerTeacher(req, res) {
+        logger_1.default.info({ adminId: req.user?.id, email: req.body.email }, '🔵 Admin registering new teacher...');
+        const data = validation_1.teacherCompleteOnboardingSchema.extend({
+            email: require('zod').z.string().email('Invalid email'),
+            name: require('zod').z.string().min(1, 'Name is required'),
+        }).parse(req.body);
+        const result = await admin_service_1.AdminService.registerTeacher(req.user.id, data);
+        logger_1.default.info({ adminId: req.user?.id, teacherId: result.teacher.id }, '✅ Teacher registered by admin successfully');
+        res.status(201).json({
+            success: true,
+            data: {
+                message: 'Teacher registered successfully',
+                credentials: result.credentials,
+                teacher: result.teacher,
+            },
+        });
+    }
     // GET /api/v1/admin/stats - Dashboard statistics
     static async getDashboardStats(_req, res) {
         const stats = await admin_service_1.AdminService.getDashboardStats();

@@ -7,6 +7,50 @@ export declare const registerSchema: z.ZodObject<{
         admin: "admin";
     }>>;
 }, z.core.$strip>;
+export declare const studentSendOTPSchema: z.ZodObject<{
+    email: z.ZodString;
+}, z.core.$strip>;
+export declare const studentVerifyOTPSchema: z.ZodObject<{
+    email: z.ZodString;
+    otp_code: z.ZodString;
+}, z.core.$strip>;
+export declare const studentResendOTPSchema: z.ZodObject<{
+    email: z.ZodString;
+}, z.core.$strip>;
+export declare const studentCompleteEmailSignupSchema: z.ZodObject<{
+    email: z.ZodString;
+    name: z.ZodString;
+    gender: z.ZodEnum<{
+        male: "male";
+        female: "female";
+        other: "other";
+    }>;
+    date_of_birth: z.ZodString;
+    password: z.ZodString;
+    guardian_name: z.ZodOptional<z.ZodString>;
+    guardian_phone: z.ZodOptional<z.ZodString>;
+}, z.core.$strip>;
+export declare const studentCompleteGoogleSignupSchema: z.ZodObject<{
+    user_id: z.ZodString;
+    gender: z.ZodEnum<{
+        male: "male";
+        female: "female";
+        other: "other";
+    }>;
+    date_of_birth: z.ZodString;
+    google_picture_url: z.ZodOptional<z.ZodString>;
+    guardian_name: z.ZodOptional<z.ZodString>;
+    guardian_phone: z.ZodOptional<z.ZodString>;
+}, z.core.$strip>;
+export declare const studentUpdateProfilePictureSchema: z.ZodObject<{
+    picture_url: z.ZodString;
+}, z.core.$strip>;
+export type StudentSendOTPInput = z.infer<typeof studentSendOTPSchema>;
+export type StudentVerifyOTPInput = z.infer<typeof studentVerifyOTPSchema>;
+export type StudentResendOTPInput = z.infer<typeof studentResendOTPSchema>;
+export type StudentCompleteEmailSignupInput = z.infer<typeof studentCompleteEmailSignupSchema>;
+export type StudentCompleteGoogleSignupInput = z.infer<typeof studentCompleteGoogleSignupSchema>;
+export type StudentUpdateProfilePictureInput = z.infer<typeof studentUpdateProfilePictureSchema>;
 export declare const teacherCompleteOnboardingSchema: z.ZodObject<{
     phone: z.ZodString;
     date_of_birth: z.ZodString;
@@ -34,16 +78,28 @@ export declare const teacherCompleteOnboardingSchema: z.ZodObject<{
     learner_groups: z.ZodArray<z.ZodString>;
     learner_groups_other: z.ZodOptional<z.ZodString>;
     other_contribution: z.ZodOptional<z.ZodString>;
-    instruments: z.ZodArray<z.ZodObject<{
+    instruments: z.ZodArray<z.ZodDiscriminatedUnion<[z.ZodObject<{
+        teach_or_perform: z.ZodLiteral<"Teach">;
         instrument: z.ZodString;
-        teach_or_perform: z.ZodEnum<{
-            Teach: "Teach";
-            Perform: "Perform";
+        class_mode: z.ZodEnum<{
+            online: "online";
+            offline: "offline";
         }>;
-        base_price: z.ZodOptional<z.ZodNumber>;
-    }, z.core.$strip>>;
-    open_to_international: z.ZodBoolean;
-    international_premium: z.ZodOptional<z.ZodNumber>;
+        tiers: z.ZodArray<z.ZodObject<{
+            level: z.ZodEnum<{
+                beginner: "beginner";
+                intermediate: "intermediate";
+                advanced: "advanced";
+            }>;
+            price_inr: z.ZodNumber;
+        }, z.core.$strip>>;
+    }, z.core.$strip>, z.ZodObject<{
+        teach_or_perform: z.ZodLiteral<"Perform">;
+        instrument: z.ZodString;
+        performance_fee_inr: z.ZodNumber;
+    }, z.core.$strip>], "teach_or_perform">>;
+    open_to_international: z.ZodDefault<z.ZodBoolean>;
+    international_premium: z.ZodDefault<z.ZodNumber>;
 }, z.core.$strip>;
 export declare const teacherOnboardingSchema: z.ZodObject<{
     bio: z.ZodString;

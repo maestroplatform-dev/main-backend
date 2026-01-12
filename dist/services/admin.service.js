@@ -6,7 +6,157 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.AdminService = void 0;
 const database_1 = __importDefault(require("../config/database"));
 const types_1 = require("../types");
+const supabase_js_1 = require("@supabase/supabase-js");
+const teacher_onboarding_service_1 = require("./teacher-onboarding.service");
+const auth_service_1 = require("./auth.service");
+const resend_1 = require("resend");
+const logger_1 = __importDefault(require("../utils/logger"));
+const resend = new resend_1.Resend(process.env.RESEND_API_KEY);
 class AdminService {
+    // Register a new teacher as admin (creates user, profile, and onboards)
+    static async registerTeacher(adminId, data) {
+        // Initialize Supabase admin client
+        const supabase = (0, supabase_js_1.createClient)(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+        // Step 1: Create user in Supabase
+        const tempPassword = Math.random().toString(36).slice(-12);
+        const { data: signUpData, error: signUpError } = await supabase.auth.admin.createUser({
+            email: data.email,
+            password: tempPassword,
+            email_confirm: true,
+        });
+        if (signUpError) {
+            throw new types_1.AppError(400, signUpError.message, 'USER_CREATION_FAILED');
+        }
+        const teacherId = signUpData.user.id;
+        // Step 2: Create profile in database
+        await auth_service_1.AuthService.register(teacherId, data.email, data.name, 'teacher');
+        // Step 3: Complete teacher onboarding
+        const teacher = await teacher_onboarding_service_1.TeacherOnboardingService.completeOnboarding(teacherId, data);
+        // Step 4: Send credentials email
+        try {
+            const teacherLoginUrl = process.env.TEACHER_LOGIN_URL || 'https://teacher.maestera.app/login';
+            const result = await resend.emails.send({
+                from: process.env.RESEND_FROM_EMAIL || 'noreply@maestera.com',
+                to: data.email,
+                subject: 'Maestera – Your Teacher Account',
+                html: `<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Maestera – Your Teacher Account</title>
+  </head>
+  <body style="margin:0; padding:0; background-color:#0b0b0b; font-family: Arial, Helvetica, sans-serif;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#0b0b0b; padding:40px 0;">
+      <tr>
+        <td align="center">
+          <table width="600" cellpadding="0" cellspacing="0" style="background:#121212; border-radius:12px; overflow:hidden; box-shadow:0 0 30px rgba(255,0,0,0.15);">
+
+            <!-- Header with Logo -->
+            <tr>
+              <td style="background:linear-gradient(135deg,#b30000,#ff1a1a); padding:30px; text-align:center;">
+                <img 
+                  src="https://sojdmotuicmshiodtytf.supabase.co/storage/v1/object/sign/image%20storage/logo-main-w.png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9iMzEyMTQwOC1mMmMyLTRhYTItYTNmNy1hMzAyMThkNDEzNjMiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJpbWFnZSBzdG9yYWdlL2xvZ28tbWFpbi13LnBuZyIsImlhdCI6MTc2Nzk5MzU2NSwiZXhwIjoxNzk5NTI5NTY1fQ.i-pckYiLgybaLC5Z8qhmbItKEnHwNRxZDGXuUphkuO4"
+                  alt="Maestera Logo"
+                  width="140"
+                  style="display:block; margin:0 auto 15px auto;"
+                />
+                <h1 style="margin:0; color:#ffffff; letter-spacing:2px; font-size:24px;">Teacher Portal Access</h1>
+                
+              </td>
+            </tr>
+
+            <!-- Body -->
+            <tr>
+              <td style="padding:40px; color:#ffffff;">
+                <h2 style="margin-top:0; color:#ff4d4d;">Hey ${data.name},</h2>
+
+                <p style="line-height:1.7; color:#dddddd; font-size:15px;">
+                  Your Maestera <strong>Teacher Account</strong> has been created!  
+                  Below are your login credentials for the Teacher Portal:
+                </p>
+
+                <!-- Credentials Box -->
+                <div style="background:#0f0f0f; border:1px solid #ff1a1a; border-radius:8px; padding:20px; margin:25px 0; font-size:15px;">
+                  <p style="margin:0; color:#aaaaaa;">📧 <strong>Login ID</strong></p>
+                  <p style="margin:5px 0 15px; font-weight:bold; color:#ffffff;">${data.email}</p>
+
+                  <p style="margin:0; color:#aaaaaa;">🔑 <strong>Password</strong></p>
+                  <p style="margin:5px 0; font-weight:bold; color:#ffffff;">${tempPassword}</p>
+                </div>
+
+                <!-- CTA Button -->
+                <div style="text-align:center; margin:35px 0;">
+                  <a href="${teacherLoginUrl}" target="_blank"
+                     style="background:linear-gradient(135deg,#ff1a1a,#b30000);
+                            color:#ffffff;
+                            text-decoration:none;
+                            padding:15px 35px;
+                            border-radius:30px;
+                            font-weight:bold;
+                            font-size:16px;
+                            display:inline-block;
+                            box-shadow:0 8px 20px rgba(255,0,0,0.4);">
+                    Visit Teacher Dashboard
+                  </a>
+                </div>
+
+                <!-- Under Development Notice -->
+                <div style="background:#1a1a1a; border-left:4px solid #ff1a1a; padding:20px; border-radius:6px; font-size:14px;">
+                  <p style="margin:0; color:#ffb3b3; font-weight:bold;">🚧 Platform Under Development</p>
+                  <p style="margin:10px 0 0; color:#cccccc; line-height:1.6;">
+                    The Teacher Dashboard is currently under development,  
+                    so you won't be able to log in just yet.
+                    <br><br>
+                    As soon as the site is live, you'll receive an automatic notification email 🎉
+                  </p>
+                </div>
+
+                <p style="margin-top:35px; color:#aaaaaa; line-height:1.7; font-size:14px;">
+                  Thanks for joining the Maestera community.  
+                  If you ever have questions, just reply — we're here to help!
+                </p>
+
+                <p style="margin-top:25px; color:#ffffff; font-size:15px;">
+                  — <strong style="color:#ff1a1a;">Team Maestera</strong>
+                </p>
+              </td>
+            </tr>
+
+            <!-- Footer -->
+            <tr>
+              <td style="background:#0b0b0b; padding:18px; text-align:center; color:#666666; font-size:12px;">
+                © 2026 Maestera. All rights reserved.<br>
+                Please don't share your login information with anyone.
+              </td>
+            </tr>
+
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`,
+            });
+            logger_1.default.info({
+                teacherId,
+                email: data.email,
+                resendId: result.data?.id,
+                resendError: result.error,
+                from: process.env.RESEND_FROM_EMAIL
+            }, '✅ Credentials email sent');
+        }
+        catch (emailError) {
+            logger_1.default.error({ teacherId, email: data.email, error: emailError }, '⚠️ Failed to send credentials email');
+            // Don't throw - let the registration succeed even if email fails
+        }
+        return {
+            credentials: {
+                email: data.email,
+                password: tempPassword,
+            },
+            teacher,
+        };
+    }
     // Get dashboard statistics
     static async getDashboardStats() {
         const [totalUsers, totalTeachers, totalStudents, verifiedTeachers, pendingTeachers, totalBookings, completedBookings, totalRevenue, recentSignups,] = await Promise.all([

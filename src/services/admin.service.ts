@@ -365,6 +365,140 @@ export class AdminService {
     return updated
   }
 
+    // Get detailed teacher information
+    static async getTeacherDetails(teacherId: string) {
+      const teacher = await prisma.teachers.findUnique({
+        where: { id: teacherId },
+        include: {
+          profiles: {
+            select: {
+              name: true,
+              is_active: true,
+              created_at: true,
+              users: {
+                select: {
+                  email: true,
+                }
+              }
+            }
+          },
+          teacher_languages: {
+            select: {
+              language: true,
+            }
+          },
+          teacher_engagements: {
+            select: {
+              engagement_type: true,
+              collaborative_projects: true,
+              collaborative_other: true,
+              performance_fee_per_hour: true,
+            }
+          },
+          teacher_formats: {
+            select: {
+              class_formats: true,
+              class_formats_other: true,
+              exam_training: true,
+              exam_training_other: true,
+              additional_formats: true,
+              additional_formats_other: true,
+              learner_groups: true,
+              learner_groups_other: true,
+              performance_settings: true,
+              performance_settings_other: true,
+              other_contribution: true,
+            }
+          },
+          teacher_instruments: {
+            select: {
+              id: true,
+              instrument: true,
+              teach_or_perform: true,
+              class_mode: true,
+              base_price: true,
+              performance_fee_inr: true,
+              performance_fee_foreign: true,
+              teacher_instrument_tiers: {
+                select: {
+                  level: true,
+                  mode: true,
+                  price_inr: true,
+                  price_foreign: true,
+                }
+              }
+            }
+          },
+          reviews: {
+            select: {
+              id: true,
+              rating: true,
+              comment: true,
+              created_at: true,
+              students: {
+                select: {
+                  profiles: {
+                    select: {
+                      name: true,
+                    }
+                  }
+                }
+              }
+            },
+            orderBy: { created_at: 'desc' },
+            take: 10,
+          },
+          bookings: {
+            select: {
+              id: true,
+              status: true,
+              created_at: true,
+              scheduled_at: true,
+              duration_minutes: true,
+              // total_amount not stored on bookings table; omit
+              students: {
+                select: {
+                  profiles: {
+                    select: {
+                      name: true,
+                    }
+                  }
+                }
+              }
+            },
+            orderBy: { created_at: 'desc' },
+            take: 10,
+          },
+          _count: {
+            select: {
+              bookings: true,
+              reviews: true,
+            }
+          }
+        }
+      }) as any
+
+      if (!teacher) {
+        throw new AppError(404, 'Teacher not found', 'TEACHER_NOT_FOUND')
+      }
+
+      // Calculate statistics
+      const avgRating = teacher.reviews && teacher.reviews.length > 0
+        ? teacher.reviews.reduce((sum: number, r: any) => sum + r.rating, 0) / teacher.reviews.length
+        : 0
+
+      return {
+        ...teacher,
+        statistics: {
+          totalBookings: teacher._count?.bookings || 0,
+          totalReviews: teacher._count?.reviews || 0,
+          averageRating: Math.round(avgRating * 10) / 10,
+        },
+        languages: teacher.teacher_languages?.map((l: any) => l.language) || [],
+        engagement: teacher.teacher_engagements || null,
+        formats: teacher.teacher_formats || null,
+      }
+    }
   // Get all users with filters
   static async getUsers(params: {
     role?: string

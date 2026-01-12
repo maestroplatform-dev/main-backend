@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { AuthRequest } from '../types';
 export declare class AdminController {
+    static registerTeacher(req: AuthRequest, res: Response): Promise<void>;
     static getDashboardStats(_req: AuthRequest, res: Response): Promise<void>;
     static listTeachers(req: AuthRequest, res: Response): Promise<void>;
     static updateTeacherVerification(req: AuthRequest, res: Response): Promise<void>;

@@ -7,6 +7,7 @@ const express_1 = require("express");
 const health_routes_1 = __importDefault(require("./health.routes"));
 const test_routes_1 = __importDefault(require("./test.routes"));
 const auth_routes_1 = __importDefault(require("./auth.routes"));
+const student_auth_routes_1 = __importDefault(require("./student-auth.routes"));
 const teachers_routes_1 = __importDefault(require("./teachers.routes"));
 const admin_routes_1 = __importDefault(require("./admin.routes"));
 const router = (0, express_1.Router)();
@@ -16,6 +17,8 @@ router.use(health_routes_1.default);
 router.use(test_routes_1.default);
 // API v1 routes
 router.use('/api/v1/auth', auth_routes_1.default);
+router.use('/api/v1/auth/student', student_auth_routes_1.default);
+router.use('/api/v1/student', student_auth_routes_1.default);
 router.use('/api/v1/teachers', teachers_routes_1.default);
 router.use('/api/v1/admin', admin_routes_1.default);
 exports.default = router;

@@ -60,8 +60,14 @@ export declare const teacherCompleteOnboardingSchema: z.ZodObject<{
     performance_experience_years: z.ZodNumber;
     current_city: z.ZodString;
     pincode: z.ZodString;
-    demo_session_available: z.ZodBoolean;
     media_consent: z.ZodBoolean;
+    profile_picture: z.ZodOptional<z.ZodString>;
+    demo: z.ZodOptional<z.ZodBoolean>;
+    tagline: z.ZodOptional<z.ZodString>;
+    teaching_style: z.ZodOptional<z.ZodString>;
+    education: z.ZodOptional<z.ZodString>;
+    professional_experience: z.ZodOptional<z.ZodString>;
+    youtube_links: z.ZodDefault<z.ZodArray<z.ZodString>>;
     engagement_type: z.ZodEnum<{
         Teaching: "Teaching";
         Performance: "Performance";
@@ -69,14 +75,17 @@ export declare const teacherCompleteOnboardingSchema: z.ZodObject<{
     }>;
     collaborative_projects: z.ZodDefault<z.ZodArray<z.ZodString>>;
     collaborative_other: z.ZodOptional<z.ZodString>;
-    class_formats: z.ZodArray<z.ZodString>;
+    performance_fee_per_hour: z.ZodOptional<z.ZodNumber>;
+    class_formats: z.ZodDefault<z.ZodArray<z.ZodString>>;
     class_formats_other: z.ZodOptional<z.ZodString>;
     exam_training: z.ZodDefault<z.ZodArray<z.ZodString>>;
     exam_training_other: z.ZodOptional<z.ZodString>;
     additional_formats: z.ZodDefault<z.ZodArray<z.ZodString>>;
     additional_formats_other: z.ZodOptional<z.ZodString>;
-    learner_groups: z.ZodArray<z.ZodString>;
+    learner_groups: z.ZodDefault<z.ZodArray<z.ZodString>>;
     learner_groups_other: z.ZodOptional<z.ZodString>;
+    performance_settings: z.ZodDefault<z.ZodArray<z.ZodString>>;
+    performance_settings_other: z.ZodOptional<z.ZodString>;
     other_contribution: z.ZodOptional<z.ZodString>;
     instruments: z.ZodArray<z.ZodDiscriminatedUnion<[z.ZodObject<{
         teach_or_perform: z.ZodLiteral<"Teach">;

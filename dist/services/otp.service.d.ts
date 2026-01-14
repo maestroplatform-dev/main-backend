@@ -23,5 +23,9 @@ export declare class OTPService {
      * Get remaining time for OTP (in seconds)
      */
     static getOTPRemainingTime(email: string): number | null;
+    /**
+     * OTP Email Template
+     */
+    private static getOTPEmailTemplate;
 }
 //# sourceMappingURL=otp.service.d.ts.map

@@ -31,24 +31,24 @@ export declare class StudentService {
         user: import("@supabase/auth-js").User;
         profile: {
             id: string;
-            name: string | null;
             role: string;
             is_active: boolean | null;
             created_at: Date | null;
+            name: string | null;
         };
         student: {
             id: string;
-            name: string | null;
             created_at: Date | null;
+            name: string | null;
             date_of_birth: Date | null;
             updated_at: Date | null;
+            email_verified: boolean;
             gender: string | null;
-            profile_picture_url: string | null;
             guardian_name: string | null;
             guardian_phone: string | null;
-            signup_method: string;
-            email_verified: boolean;
             onboarding_status: string;
+            profile_picture_url: string | null;
+            signup_method: string;
         };
     }>;
     /**
@@ -58,24 +58,24 @@ export declare class StudentService {
         user: import("@supabase/auth-js").User;
         profile: {
             id: string;
-            name: string | null;
             role: string;
             is_active: boolean | null;
             created_at: Date | null;
+            name: string | null;
         };
         student: {
             id: string;
-            name: string | null;
             created_at: Date | null;
+            name: string | null;
             date_of_birth: Date | null;
             updated_at: Date | null;
+            email_verified: boolean;
             gender: string | null;
-            profile_picture_url: string | null;
             guardian_name: string | null;
             guardian_phone: string | null;
-            signup_method: string;
-            email_verified: boolean;
             onboarding_status: string;
+            profile_picture_url: string | null;
+            signup_method: string;
         };
     }>;
     /**
@@ -84,75 +84,75 @@ export declare class StudentService {
     static getStudentProfile(userId: string): Promise<{
         profiles: {
             id: string;
-            name: string | null;
             role: string;
             is_active: boolean | null;
             created_at: Date | null;
+            name: string | null;
         };
     } & {
         id: string;
-        name: string | null;
         created_at: Date | null;
+        name: string | null;
         date_of_birth: Date | null;
         updated_at: Date | null;
+        email_verified: boolean;
         gender: string | null;
-        profile_picture_url: string | null;
         guardian_name: string | null;
         guardian_phone: string | null;
-        signup_method: string;
-        email_verified: boolean;
         onboarding_status: string;
+        profile_picture_url: string | null;
+        signup_method: string;
     }>;
     /**
      * Update profile picture
      */
     static updateProfilePicture(userId: string, pictureUrl: string): Promise<{
         id: string;
-        name: string | null;
         created_at: Date | null;
+        name: string | null;
         date_of_birth: Date | null;
         updated_at: Date | null;
+        email_verified: boolean;
         gender: string | null;
-        profile_picture_url: string | null;
         guardian_name: string | null;
         guardian_phone: string | null;
-        signup_method: string;
-        email_verified: boolean;
         onboarding_status: string;
+        profile_picture_url: string | null;
+        signup_method: string;
     }>;
     /**
      * Get student by email
      */
     static getStudentByEmail(email: string): Promise<{
         id: string;
-        name: string | null;
         created_at: Date | null;
+        name: string | null;
         date_of_birth: Date | null;
         updated_at: Date | null;
+        email_verified: boolean;
         gender: string | null;
-        profile_picture_url: string | null;
         guardian_name: string | null;
         guardian_phone: string | null;
-        signup_method: string;
-        email_verified: boolean;
         onboarding_status: string;
+        profile_picture_url: string | null;
+        signup_method: string;
     } | null>;
     /**
      * Update student onboarding status
      */
     static updateOnboardingStatus(userId: string, status: string): Promise<{
         id: string;
-        name: string | null;
         created_at: Date | null;
+        name: string | null;
         date_of_birth: Date | null;
         updated_at: Date | null;
+        email_verified: boolean;
         gender: string | null;
-        profile_picture_url: string | null;
         guardian_name: string | null;
         guardian_phone: string | null;
-        signup_method: string;
-        email_verified: boolean;
         onboarding_status: string;
+        profile_picture_url: string | null;
+        signup_method: string;
     }>;
 }
 export {};

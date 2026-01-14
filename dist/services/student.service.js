@@ -38,7 +38,7 @@ class StudentService {
             throw new types_1.AppError(400, 'Guardian information is required for students under 18', 'GUARDIAN_REQUIRED');
         }
         // Create Supabase user with email and password
-        const { data: signUpData, error: signUpError } = await supabase_1.supabase.auth.admin.createUser({
+        const { data: signUpData, error: signUpError } = await supabase_1.supabaseAdmin.auth.admin.createUser({
             email: data.email,
             password: data.password,
             email_confirm: true,
@@ -78,7 +78,7 @@ class StudentService {
         }
         catch (error) {
             // Rollback: Delete Supabase user if student creation fails
-            await supabase_1.supabase.auth.admin.deleteUser(userId);
+            await supabase_1.supabaseAdmin.auth.admin.deleteUser(userId);
             logger_1.default.error({ userId, error }, '❌ Failed to create student profile, rolled back user');
             throw error;
         }
@@ -94,7 +94,7 @@ class StudentService {
             throw new types_1.AppError(400, 'Guardian information is required for students under 18', 'GUARDIAN_REQUIRED');
         }
         // Get user from Supabase to verify they exist
-        const { data: userData, error: userError } = await supabase_1.supabase.auth.admin.getUserById(data.userId);
+        const { data: userData, error: userError } = await supabase_1.supabaseAdmin.auth.admin.getUserById(data.userId);
         if (userError || !userData.user) {
             throw new types_1.AppError(404, 'User not found', 'USER_NOT_FOUND');
         }

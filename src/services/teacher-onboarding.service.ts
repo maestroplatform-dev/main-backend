@@ -28,6 +28,7 @@ export class TeacherOnboardingService {
             pincode: data.pincode,
             demo_session_available: data.demo_session_available,
             media_consent: data.media_consent,
+            profile_picture: data.profile_picture,
             engagement_type: data.engagement_type,
             open_to_international: data.open_to_international,
             international_premium: data.open_to_international ? data.international_premium : 0,

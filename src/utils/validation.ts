@@ -85,6 +85,7 @@ export const teacherCompleteOnboardingSchema = z.object({
   pincode: z.string().regex(/^\d{6}$/, 'Pincode must be 6 digits'),
   demo_session_available: z.boolean(),
   media_consent: z.boolean(),
+  profile_picture: z.string().url('Invalid picture URL').optional(),
 
   // Step 3: Engagement Preferences
   engagement_type: z.enum(['Teaching', 'Performance', 'Both']),

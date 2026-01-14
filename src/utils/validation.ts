@@ -83,9 +83,17 @@ export const teacherCompleteOnboardingSchema = z.object({
   performance_experience_years: z.number().int().min(0).max(70),
   current_city: z.string().min(1),
   pincode: z.string().regex(/^\d{6}$/, 'Pincode must be 6 digits'),
-  demo_session_available: z.boolean(),
   media_consent: z.boolean(),
   profile_picture: z.string().url('Invalid picture URL').optional(),
+  
+  // Profile Details (optional fields)
+  demo: z.boolean().optional(),
+  tagline: z.string().max(150, 'Tagline must not exceed 150 characters').optional(),
+  bio: z.string().optional(),
+  teaching_style: z.string().optional(),
+  education: z.string().optional(),
+  professional_experience: z.string().optional(),
+  youtube_links: z.array(z.string().url('Invalid YouTube URL')).default([]),
 
   // Step 3: Engagement Preferences
   engagement_type: z.enum(['Teaching', 'Performance', 'Both']),

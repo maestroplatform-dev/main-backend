@@ -28,8 +28,14 @@ class TeacherOnboardingService {
                         performance_experience_years: data.performance_experience_years,
                         current_city: data.current_city,
                         pincode: data.pincode,
-                        demo_session_available: data.demo_session_available,
                         media_consent: data.media_consent,
+                        profile_picture: data.profile_picture,
+                        demo: data.demo,
+                        tagline: data.tagline,
+                        teaching_style: data.teaching_style,
+                        education: data.education,
+                        professional_experience: data.professional_experience,
+                        youtube_links: data.youtube_links,
                         engagement_type: data.engagement_type,
                         open_to_international: data.open_to_international,
                         international_premium: data.open_to_international ? data.international_premium : 0,
@@ -51,11 +57,13 @@ class TeacherOnboardingService {
                         engagement_type: data.engagement_type,
                         collaborative_projects: data.collaborative_projects,
                         collaborative_other: data.collaborative_other,
+                        performance_fee_per_hour: data.performance_fee_per_hour,
                     },
                     update: {
                         engagement_type: data.engagement_type,
                         collaborative_projects: data.collaborative_projects,
                         collaborative_other: data.collaborative_other,
+                        performance_fee_per_hour: data.performance_fee_per_hour,
                     },
                 });
                 // Teaching formats
@@ -71,6 +79,8 @@ class TeacherOnboardingService {
                         additional_formats_other: data.additional_formats_other,
                         learner_groups: data.learner_groups,
                         learner_groups_other: data.learner_groups_other,
+                        performance_settings: data.performance_settings,
+                        performance_settings_other: data.performance_settings_other,
                         other_contribution: data.other_contribution,
                     },
                     update: {
@@ -82,6 +92,8 @@ class TeacherOnboardingService {
                         additional_formats_other: data.additional_formats_other,
                         learner_groups: data.learner_groups,
                         learner_groups_other: data.learner_groups_other,
+                        performance_settings: data.performance_settings,
+                        performance_settings_other: data.performance_settings_other,
                         other_contribution: data.other_contribution,
                     },
                 });

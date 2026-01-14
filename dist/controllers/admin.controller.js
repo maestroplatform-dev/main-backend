@@ -49,6 +49,15 @@ class AdminController {
             meta: result.pagination,
         });
     }
+    // GET /api/v1/admin/teachers/:id - Get detailed teacher information
+    static async getTeacherDetails(req, res) {
+        const { id } = req.params;
+        const teacher = await admin_service_1.AdminService.getTeacherDetails(id);
+        res.json({
+            success: true,
+            data: teacher,
+        });
+    }
     // PATCH /api/v1/admin/teachers/:id/verify - Verify/Unverify teacher
     static async updateTeacherVerification(req, res) {
         const { id } = req.params;

@@ -565,7 +565,6 @@ model teachers {
   name                         String?
   current_city                 String?
   date_of_birth                DateTime?              @db.Date
-  demo_session_available       Boolean?               @default(false)
   engagement_type              String?
   international_premium        Decimal?               @db.Decimal(10, 2)
   media_consent                Boolean?               @default(false)
@@ -578,6 +577,12 @@ model teachers {
   teaching_experience_years    Int?
   updated_at                   DateTime?              @default(now()) @db.Timestamptz(6)
   profile_picture              String?
+  demo                         Boolean?               @default(false)
+  tagline                      String?
+  teaching_style               String?
+  education                    String?
+  professional_experience      String?
+  youtube_links                String[]               @default([])
   bookings                     bookings[]
   class_packages               class_packages[]
   reviews                      reviews[]

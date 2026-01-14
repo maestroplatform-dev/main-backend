@@ -68,21 +68,32 @@ exports.teacherCompleteOnboardingSchema = zod_1.z.object({
     performance_experience_years: zod_1.z.number().int().min(0).max(70),
     current_city: zod_1.z.string().min(1),
     pincode: zod_1.z.string().regex(/^\d{6}$/, 'Pincode must be 6 digits'),
-    demo_session_available: zod_1.z.boolean(),
     media_consent: zod_1.z.boolean(),
+    profile_picture: zod_1.z.string().url('Invalid picture URL').optional(),
+    // Profile Details (optional fields)
+    demo: zod_1.z.boolean().optional(),
+    tagline: zod_1.z.string().max(150, 'Tagline must not exceed 150 characters').optional(),
+    teaching_style: zod_1.z.string().optional(),
+    education: zod_1.z.string().optional(),
+    professional_experience: zod_1.z.string().optional(),
+    youtube_links: zod_1.z.array(zod_1.z.string().url('Invalid YouTube URL')).default([]),
     // Step 3: Engagement Preferences
     engagement_type: zod_1.z.enum(['Teaching', 'Performance', 'Both']),
     collaborative_projects: zod_1.z.array(zod_1.z.string()).default([]),
     collaborative_other: zod_1.z.string().optional(),
+    performance_fee_per_hour: zod_1.z.number().nonnegative().optional(),
     // Step 3: Teaching Formats
-    class_formats: zod_1.z.array(zod_1.z.string()).min(1),
+    class_formats: zod_1.z.array(zod_1.z.string()).default([]),
     class_formats_other: zod_1.z.string().optional(),
     exam_training: zod_1.z.array(zod_1.z.string()).default([]),
     exam_training_other: zod_1.z.string().optional(),
     additional_formats: zod_1.z.array(zod_1.z.string()).default([]),
     additional_formats_other: zod_1.z.string().optional(),
-    learner_groups: zod_1.z.array(zod_1.z.string()).min(1),
+    learner_groups: zod_1.z.array(zod_1.z.string()).default([]),
     learner_groups_other: zod_1.z.string().optional(),
+    // Step 3: Performance Settings
+    performance_settings: zod_1.z.array(zod_1.z.string()).default([]),
+    performance_settings_other: zod_1.z.string().optional(),
     other_contribution: zod_1.z.string().optional(),
     // Step 4: Instruments & Pricing (Teach vs Perform)
     instruments: zod_1.z

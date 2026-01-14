@@ -455,7 +455,6 @@ export class AdminService {
               created_at: true,
               scheduled_at: true,
               duration_minutes: true,
-              // total_amount not stored on bookings table; omit
               students: {
                 select: {
                   profiles: {

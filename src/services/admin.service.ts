@@ -545,6 +545,19 @@ export class AdminService {
 
       return {
         ...teacher,
+        teacher_instruments: teacher.teacher_instruments?.map((inst: any) => ({
+          id: inst.id,
+          instrument: inst.instrument,
+          teach_or_perform: inst.teach_or_perform,
+          class_mode: inst.class_mode,
+          performance_fee_inr: inst.performance_fee_inr,
+          tiers: inst.teacher_instrument_tiers?.map((tier: any) => ({
+            level: tier.level,
+            price_inr: tier.price_inr && typeof tier.price_inr === 'object' && typeof tier.price_inr.toNumber === 'function'
+              ? tier.price_inr.toNumber()
+              : tier.price_inr,
+          })) || [],
+        })) || [],
         statistics: {
           totalBookings: teacher._count?.bookings || 0,
           totalReviews: teacher._count?.reviews || 0,

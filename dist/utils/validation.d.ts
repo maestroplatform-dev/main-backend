@@ -64,6 +64,7 @@ export declare const teacherCompleteOnboardingSchema: z.ZodObject<{
     profile_picture: z.ZodOptional<z.ZodString>;
     demo: z.ZodOptional<z.ZodBoolean>;
     tagline: z.ZodOptional<z.ZodString>;
+    bio: z.ZodOptional<z.ZodString>;
     teaching_style: z.ZodOptional<z.ZodString>;
     education: z.ZodOptional<z.ZodString>;
     professional_experience: z.ZodOptional<z.ZodString>;
@@ -101,11 +102,13 @@ export declare const teacherCompleteOnboardingSchema: z.ZodObject<{
                 advanced: "advanced";
             }>;
             price_inr: z.ZodNumber;
+            platform_markup_inr: z.ZodOptional<z.ZodNumber>;
         }, z.core.$strip>>;
     }, z.core.$strip>, z.ZodObject<{
         teach_or_perform: z.ZodLiteral<"Perform">;
         instrument: z.ZodString;
         performance_fee_inr: z.ZodNumber;
+        platform_markup_inr: z.ZodOptional<z.ZodNumber>;
     }, z.core.$strip>], "teach_or_perform">>;
     open_to_international: z.ZodDefault<z.ZodBoolean>;
     international_premium: z.ZodDefault<z.ZodNumber>;

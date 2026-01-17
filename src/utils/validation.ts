@@ -129,7 +129,10 @@ export const teacherCompleteOnboardingSchema = z.object({
             .array(
               z.object({
                 level: z.enum(['beginner', 'intermediate', 'advanced']),
+                // Teacher's net price per class (what teacher earns)
                 price_inr: z.number().positive(),
+                // Optional platform markup Maestera adds on top for students
+                platform_markup_inr: z.number().nonnegative().optional(),
               })
             )
             .length(3, 'Provide beginner, intermediate, and advanced pricing'),
@@ -137,7 +140,10 @@ export const teacherCompleteOnboardingSchema = z.object({
         z.object({
           teach_or_perform: z.literal('Perform'),
           instrument: z.string().min(1),
+          // Teacher's net performance fee
           performance_fee_inr: z.number().positive(),
+          // Optional platform markup on performance bookings
+          platform_markup_inr: z.number().nonnegative().optional(),
         }),
       ])
     )

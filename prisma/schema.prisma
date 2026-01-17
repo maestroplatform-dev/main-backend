@@ -658,6 +658,7 @@ model teacher_instruments {
   class_mode               class_mode?
   performance_fee_foreign  Decimal?                   @db.Decimal(10, 2)
   performance_fee_inr      Decimal?                   @db.Decimal(10, 2)
+  performance_platform_markup_inr Decimal?            @db.Decimal(10, 2)
   teacher_instrument_tiers teacher_instrument_tiers[]
   teachers                 teachers                   @relation(fields: [teacher_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
@@ -672,6 +673,7 @@ model teacher_instrument_tiers {
   level                 instrument_level
   mode                  class_mode
   price_inr             Decimal             @db.Decimal(10, 2)
+  platform_markup_inr   Decimal?            @db.Decimal(10, 2)
   price_foreign         Decimal?            @db.Decimal(10, 2)
   created_at            DateTime            @default(now()) @db.Timestamptz(6)
   updated_at            DateTime            @default(now()) @db.Timestamptz(6)

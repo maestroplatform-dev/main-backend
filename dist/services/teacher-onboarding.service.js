@@ -32,6 +32,7 @@ class TeacherOnboardingService {
                         profile_picture: data.profile_picture,
                         demo: data.demo,
                         tagline: data.tagline,
+                        bio: data.bio,
                         teaching_style: data.teaching_style,
                         education: data.education,
                         professional_experience: data.professional_experience,
@@ -129,7 +130,9 @@ class TeacherOnboardingService {
                                 teacher_instrument_id: instrumentRow.id,
                                 level: tier.level,
                                 mode: inst.class_mode,
+                                // Teacher's net price and optional platform markup
                                 price_inr: tier.price_inr,
+                                platform_markup_inr: tier.platform_markup_inr ?? null,
                                 price_foreign: priceForeign,
                             };
                         });
@@ -145,7 +148,9 @@ class TeacherOnboardingService {
                                 teach_or_perform: inst.teach_or_perform,
                                 class_mode: null,
                                 base_price: null,
+                                // Teacher performance fee and optional platform markup
                                 performance_fee_inr: inst.performance_fee_inr,
+                                performance_platform_markup_inr: inst.platform_markup_inr ?? null,
                                 performance_fee_foreign: data.open_to_international && data.international_premium
                                     ? inst.performance_fee_inr + data.international_premium
                                     : null,

@@ -10,7 +10,9 @@ const router = (0, express_1.Router)();
 router.get('/stats', rateLimiter_1.apiLimiter, auth_1.authenticateUser, (0, auth_1.requireRole)('admin'), (0, asyncHandler_1.asyncHandler)(admin_controller_1.AdminController.getDashboardStats));
 // Teacher management
 router.get('/teachers', rateLimiter_1.apiLimiter, auth_1.authenticateUser, (0, auth_1.requireRole)('admin'), (0, asyncHandler_1.asyncHandler)(admin_controller_1.AdminController.listTeachers));
+router.get('/teachers/:id/onboarding', rateLimiter_1.apiLimiter, auth_1.authenticateUser, (0, auth_1.requireRole)('admin'), (0, asyncHandler_1.asyncHandler)(admin_controller_1.AdminController.getTeacherOnboardingData));
 router.get('/teachers/:id', rateLimiter_1.apiLimiter, auth_1.authenticateUser, (0, auth_1.requireRole)('admin'), (0, asyncHandler_1.asyncHandler)(admin_controller_1.AdminController.getTeacherDetails));
+router.put('/teachers/:id', rateLimiter_1.apiLimiter, auth_1.authenticateUser, (0, auth_1.requireRole)('admin'), (0, asyncHandler_1.asyncHandler)(admin_controller_1.AdminController.updateTeacherDetails));
 router.patch('/teachers/:id/verify', rateLimiter_1.apiLimiter, auth_1.authenticateUser, (0, auth_1.requireRole)('admin'), (0, asyncHandler_1.asyncHandler)(admin_controller_1.AdminController.updateTeacherVerification));
 router.post('/teachers/register', rateLimiter_1.apiLimiter, auth_1.authenticateUser, (0, auth_1.requireRole)('admin'), (0, asyncHandler_1.asyncHandler)(admin_controller_1.AdminController.registerTeacher));
 // User management

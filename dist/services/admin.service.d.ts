@@ -68,52 +68,7 @@ export declare class AdminService {
         page?: number;
         limit?: number;
     }): Promise<{
-        teachers: {
-            avgRating: number;
-            profiles: {
-                is_active: boolean | null;
-                created_at: Date | null;
-                name: string | null;
-            };
-            reviews: {
-                rating: number;
-            }[];
-            teacher_instruments: {
-                teach_or_perform: string;
-                instrument: string;
-                base_price: import("@prisma/client-runtime-utils").Decimal | null;
-            }[];
-            _count: {
-                bookings: number;
-                reviews: number;
-            };
-            id: string;
-            created_at: Date | null;
-            name: string | null;
-            bio: string | null;
-            experience_years: number | null;
-            verified: boolean | null;
-            current_city: string | null;
-            date_of_birth: Date | null;
-            engagement_type: string | null;
-            international_premium: import("@prisma/client-runtime-utils").Decimal | null;
-            media_consent: boolean | null;
-            music_experience_years: number | null;
-            onboarding_completed: boolean | null;
-            open_to_international: boolean | null;
-            performance_experience_years: number | null;
-            phone: string | null;
-            pincode: string | null;
-            teaching_experience_years: number | null;
-            updated_at: Date | null;
-            profile_picture: string | null;
-            demo: boolean | null;
-            tagline: string | null;
-            teaching_style: string | null;
-            education: string | null;
-            professional_experience: string | null;
-            youtube_links: string[];
-        }[];
+        teachers: any[];
         pagination: {
             page: number;
             limit: number;

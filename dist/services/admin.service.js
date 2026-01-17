@@ -257,6 +257,14 @@ class AdminService {
                             instrument: true,
                             teach_or_perform: true,
                             base_price: true,
+                            teacher_instrument_tiers: {
+                                select: {
+                                    level: true,
+                                    mode: true,
+                                    price_inr: true,
+                                    price_foreign: true,
+                                }
+                            }
                         }
                     },
                     reviews: {
@@ -275,14 +283,38 @@ class AdminService {
             }),
             database_1.default.teachers.count({ where }),
         ]);
-        // Calculate average rating for each teacher
-        const teachersWithStats = teachers.map(teacher => {
+        // Calculate average rating and starting price for each teacher
+        const teachersWithStats = teachers.map((teacher) => {
             const avgRating = teacher.reviews.length > 0
                 ? teacher.reviews.reduce((sum, r) => sum + r.rating, 0) / teacher.reviews.length
                 : 0;
+            // Find minimum price from all teacher_instrument_tiers
+            let minPrice = null;
+            if (teacher.teacher_instruments && teacher.teacher_instruments.length > 0) {
+                teacher.teacher_instruments.forEach((inst) => {
+                    if (inst.teacher_instrument_tiers && inst.teacher_instrument_tiers.length > 0) {
+                        inst.teacher_instrument_tiers.forEach((tier) => {
+                            const price = tier.price_inr && typeof tier.price_inr === 'object' && typeof tier.price_inr.toNumber === 'function'
+                                ? tier.price_inr.toNumber()
+                                : typeof tier.price_inr === 'number' ? tier.price_inr : null;
+                            if (price !== null && (minPrice === null || price < minPrice)) {
+                                minPrice = price;
+                            }
+                        });
+                    }
+                    // fallback to base_price if no tiers
+                    const basePrice = inst.base_price && typeof inst.base_price === 'object' && typeof inst.base_price.toNumber === 'function'
+                        ? inst.base_price.toNumber()
+                        : typeof inst.base_price === 'number' ? inst.base_price : null;
+                    if (basePrice !== null && (minPrice === null || basePrice < minPrice)) {
+                        minPrice = basePrice;
+                    }
+                });
+            }
             return {
                 ...teacher,
                 avgRating: Math.round(avgRating * 10) / 10,
+                starting_price: minPrice,
             };
         });
         return {
@@ -431,6 +463,29 @@ class AdminService {
         const avgRating = teacher.reviews && teacher.reviews.length > 0
             ? teacher.reviews.reduce((sum, r) => sum + r.rating, 0) / teacher.reviews.length
             : 0;
+        // Find minimum price from all teacher_instrument_tiers
+        let minPrice = null;
+        if (teacher.teacher_instruments && teacher.teacher_instruments.length > 0) {
+            teacher.teacher_instruments.forEach((inst) => {
+                if (inst.teacher_instrument_tiers && inst.teacher_instrument_tiers.length > 0) {
+                    inst.teacher_instrument_tiers.forEach((tier) => {
+                        const price = tier.price_inr && typeof tier.price_inr === 'object' && typeof tier.price_inr.toNumber === 'function'
+                            ? tier.price_inr.toNumber()
+                            : typeof tier.price_inr === 'number' ? tier.price_inr : null;
+                        if (price !== null && (minPrice === null || price < minPrice)) {
+                            minPrice = price;
+                        }
+                    });
+                }
+                // fallback to base_price if no tiers
+                const basePrice = inst.base_price && typeof inst.base_price === 'object' && typeof inst.base_price.toNumber === 'function'
+                    ? inst.base_price.toNumber()
+                    : typeof inst.base_price === 'number' ? inst.base_price : null;
+                if (basePrice !== null && (minPrice === null || basePrice < minPrice)) {
+                    minPrice = basePrice;
+                }
+            });
+        }
         return {
             ...teacher,
             statistics: {
@@ -441,6 +496,7 @@ class AdminService {
             languages: teacher.teacher_languages?.map((l) => l.language) || [],
             engagement: teacher.teacher_engagements || null,
             formats: teacher.teacher_formats || null,
+            starting_price: minPrice,
         };
     }
     // Get all users with filters

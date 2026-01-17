@@ -6,6 +6,8 @@ export declare class AdminController {
     static listTeachers(req: AuthRequest, res: Response): Promise<void>;
     static getTeacherDetails(req: AuthRequest, res: Response): Promise<void>;
     static updateTeacherVerification(req: AuthRequest, res: Response): Promise<void>;
+    static getTeacherOnboardingData(req: AuthRequest, res: Response): Promise<void>;
+    static updateTeacherDetails(req: AuthRequest, res: Response): Promise<void>;
     static listUsers(req: AuthRequest, res: Response): Promise<void>;
     static updateUserStatus(req: AuthRequest, res: Response): Promise<void>;
     static getAuditLogs(req: AuthRequest, res: Response): Promise<void>;

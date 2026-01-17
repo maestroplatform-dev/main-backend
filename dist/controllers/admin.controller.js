@@ -4,8 +4,12 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AdminController = void 0;
+const types_1 = require("../types");
 const admin_service_1 = require("../services/admin.service");
 const validation_1 = require("../utils/validation");
+const teacher_onboarding_service_1 = require("../services/teacher-onboarding.service");
+const database_1 = __importDefault(require("../config/database"));
+const supabase_js_1 = require("@supabase/supabase-js");
 const logger_1 = __importDefault(require("../utils/logger"));
 class AdminController {
     // POST /api/v1/admin/teachers/register - Admin register a new teacher (creates user + profile + onboarding)
@@ -67,6 +71,54 @@ class AdminController {
             success: true,
             data: teacher,
             message: `Teacher ${verified ? 'verified' : 'unverified'} successfully`,
+        });
+    }
+    // GET /api/v1/admin/teachers/:id/onboarding - Get full onboarding-style data for a teacher
+    static async getTeacherOnboardingData(req, res) {
+        const { id } = req.params;
+        const data = await teacher_onboarding_service_1.TeacherOnboardingService.getOnboardingData(id);
+        res.status(200).json({
+            success: true,
+            data,
+        });
+    }
+    // PUT /api/v1/admin/teachers/:id - Update teacher details (same schema as onboarding)
+    static async updateTeacherDetails(req, res) {
+        const { id } = req.params;
+        // Allow optional name/email updates in addition to onboarding data
+        const schema = validation_1.teacherCompleteOnboardingSchema.extend({
+            name: require('zod').z.string().min(1).optional(),
+            email: require('zod').z.string().email().optional(),
+        });
+        const parsed = schema.parse(req.body);
+        const { name, email, ...onboardingData } = parsed;
+        // Complete onboarding-style update for teacher-related tables
+        const updated = await teacher_onboarding_service_1.TeacherOnboardingService.completeOnboarding(id, onboardingData);
+        // Update display name in profiles and teachers if provided
+        if (name) {
+            await database_1.default.profiles.update({
+                where: { id },
+                data: { name },
+            });
+            await database_1.default.teachers.update({
+                where: { id },
+                data: { name },
+            });
+        }
+        // Update Supabase auth email if provided
+        if (email) {
+            const supabase = (0, supabase_js_1.createClient)(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+            const { error } = await supabase.auth.admin.updateUserById(id, { email });
+            if (error) {
+                throw new types_1.AppError(400, error.message, 'EMAIL_UPDATE_FAILED');
+            }
+        }
+        res.status(200).json({
+            success: true,
+            data: {
+                message: 'Teacher updated successfully',
+                teacher: updated,
+            },
         });
     }
     // GET /api/v1/admin/users - List all users with filters

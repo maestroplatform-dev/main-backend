@@ -73,6 +73,7 @@ exports.teacherCompleteOnboardingSchema = zod_1.z.object({
     // Profile Details (optional fields)
     demo: zod_1.z.boolean().optional(),
     tagline: zod_1.z.string().max(150, 'Tagline must not exceed 150 characters').optional(),
+    bio: zod_1.z.string().optional(),
     teaching_style: zod_1.z.string().optional(),
     education: zod_1.z.string().optional(),
     professional_experience: zod_1.z.string().optional(),
@@ -105,14 +106,20 @@ exports.teacherCompleteOnboardingSchema = zod_1.z.object({
             tiers: zod_1.z
                 .array(zod_1.z.object({
                 level: zod_1.z.enum(['beginner', 'intermediate', 'advanced']),
+                // Teacher's net price per class (what teacher earns)
                 price_inr: zod_1.z.number().positive(),
+                // Optional platform markup Maestera adds on top for students
+                platform_markup_inr: zod_1.z.number().nonnegative().optional(),
             }))
                 .length(3, 'Provide beginner, intermediate, and advanced pricing'),
         }),
         zod_1.z.object({
             teach_or_perform: zod_1.z.literal('Perform'),
             instrument: zod_1.z.string().min(1),
+            // Teacher's net performance fee
             performance_fee_inr: zod_1.z.number().positive(),
+            // Optional platform markup on performance bookings
+            platform_markup_inr: zod_1.z.number().nonnegative().optional(),
         }),
     ]))
         .min(1),

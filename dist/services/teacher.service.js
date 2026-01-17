@@ -65,7 +65,45 @@ class TeacherService {
         if (!teacher) {
             throw new types_1.AppError(404, 'Teacher not found', 'TEACHER_NOT_FOUND');
         }
-        return teacher;
+        // Compute minimum student-facing starting price from all instruments and tiers
+        let minPrice = null;
+        if (teacher.teacher_instruments && teacher.teacher_instruments.length > 0) {
+            teacher.teacher_instruments.forEach((inst) => {
+                if (inst.teacher_instrument_tiers && inst.teacher_instrument_tiers.length > 0) {
+                    inst.teacher_instrument_tiers.forEach((tier) => {
+                        const raw = tier.price_inr;
+                        const teacherPrice = raw && typeof raw === 'object' && typeof raw.toNumber === 'function'
+                            ? raw.toNumber()
+                            : typeof raw === 'number'
+                                ? raw
+                                : null;
+                        const rawMarkup = tier.platform_markup_inr;
+                        const markup = rawMarkup && typeof rawMarkup === 'object' && typeof rawMarkup.toNumber === 'function'
+                            ? rawMarkup.toNumber()
+                            : typeof rawMarkup === 'number'
+                                ? rawMarkup
+                                : 0;
+                        const studentPrice = teacherPrice !== null ? teacherPrice + markup : null;
+                        if (studentPrice !== null && (minPrice === null || studentPrice < minPrice)) {
+                            minPrice = studentPrice;
+                        }
+                    });
+                }
+                const rawBase = inst.base_price;
+                const basePrice = rawBase && typeof rawBase === 'object' && typeof rawBase.toNumber === 'function'
+                    ? rawBase.toNumber()
+                    : typeof rawBase === 'number'
+                        ? rawBase
+                        : null;
+                if (basePrice !== null && (minPrice === null || basePrice < minPrice)) {
+                    minPrice = basePrice;
+                }
+            });
+        }
+        return {
+            ...teacher,
+            starting_price: minPrice,
+        };
     }
     // Update teacher profile
     static async updateProfile(teacherId, data) {
@@ -109,7 +147,47 @@ class TeacherService {
                 created_at: 'desc',
             },
         });
-        return teachers;
+        const teachersWithStartingPrice = teachers.map((teacher) => {
+            let minPrice = null;
+            if (teacher.teacher_instruments && teacher.teacher_instruments.length > 0) {
+                teacher.teacher_instruments.forEach((inst) => {
+                    if (inst.teacher_instrument_tiers && inst.teacher_instrument_tiers.length > 0) {
+                        inst.teacher_instrument_tiers.forEach((tier) => {
+                            const raw = tier.price_inr;
+                            const teacherPrice = raw && typeof raw === 'object' && typeof raw.toNumber === 'function'
+                                ? raw.toNumber()
+                                : typeof raw === 'number'
+                                    ? raw
+                                    : null;
+                            const rawMarkup = tier.platform_markup_inr;
+                            const markup = rawMarkup && typeof rawMarkup === 'object' && typeof rawMarkup.toNumber === 'function'
+                                ? rawMarkup.toNumber()
+                                : typeof rawMarkup === 'number'
+                                    ? rawMarkup
+                                    : 0;
+                            const studentPrice = teacherPrice !== null ? teacherPrice + markup : null;
+                            if (studentPrice !== null && (minPrice === null || studentPrice < minPrice)) {
+                                minPrice = studentPrice;
+                            }
+                        });
+                    }
+                    const rawBase = inst.base_price;
+                    const basePrice = rawBase && typeof rawBase === 'object' && typeof rawBase.toNumber === 'function'
+                        ? rawBase.toNumber()
+                        : typeof rawBase === 'number'
+                            ? rawBase
+                            : null;
+                    if (basePrice !== null && (minPrice === null || basePrice < minPrice)) {
+                        minPrice = basePrice;
+                    }
+                });
+            }
+            return {
+                ...teacher,
+                starting_price: minPrice,
+            };
+        });
+        return teachersWithStartingPrice;
     }
 }
 exports.TeacherService = TeacherService;

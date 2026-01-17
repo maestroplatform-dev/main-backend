@@ -134,7 +134,9 @@ export class TeacherOnboardingService {
                 teacher_instrument_id: instrumentRow.id,
                 level: tier.level,
                 mode: inst.class_mode,
+                // Teacher's net price and optional platform markup
                 price_inr: tier.price_inr,
+                platform_markup_inr: tier.platform_markup_inr ?? null,
                 price_foreign: priceForeign,
               }
             })
@@ -150,7 +152,9 @@ export class TeacherOnboardingService {
                 teach_or_perform: inst.teach_or_perform,
                 class_mode: null,
                 base_price: null,
+                // Teacher performance fee and optional platform markup
                 performance_fee_inr: inst.performance_fee_inr,
+                performance_platform_markup_inr: inst.platform_markup_inr ?? null,
                 performance_fee_foreign:
                   data.open_to_international && data.international_premium
                     ? inst.performance_fee_inr + data.international_premium

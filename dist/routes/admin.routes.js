@@ -18,6 +18,10 @@ router.post('/teachers/register', rateLimiter_1.apiLimiter, auth_1.authenticateU
 // User management
 router.get('/users', rateLimiter_1.apiLimiter, auth_1.authenticateUser, (0, auth_1.requireRole)('admin'), (0, asyncHandler_1.asyncHandler)(admin_controller_1.AdminController.listUsers));
 router.patch('/users/:id/status', rateLimiter_1.apiLimiter, auth_1.authenticateUser, (0, auth_1.requireRole)('admin'), (0, asyncHandler_1.asyncHandler)(admin_controller_1.AdminController.updateUserStatus));
+// Package card configuration
+router.get('/package-card-templates', rateLimiter_1.apiLimiter, auth_1.authenticateUser, (0, auth_1.requireRole)('admin'), (0, asyncHandler_1.asyncHandler)(admin_controller_1.AdminController.listPackageCardTemplates));
+router.put('/package-card-templates/:level', rateLimiter_1.apiLimiter, auth_1.authenticateUser, (0, auth_1.requireRole)('admin'), (0, asyncHandler_1.asyncHandler)(admin_controller_1.AdminController.upsertPackageCardTemplate));
+router.put('/students/:id/package-card', rateLimiter_1.apiLimiter, auth_1.authenticateUser, (0, auth_1.requireRole)('admin'), (0, asyncHandler_1.asyncHandler)(admin_controller_1.AdminController.updateStudentPackageCard));
 // Audit logs
 router.get('/audit-logs', rateLimiter_1.apiLimiter, auth_1.authenticateUser, (0, auth_1.requireRole)('admin'), (0, asyncHandler_1.asyncHandler)(admin_controller_1.AdminController.getAuditLogs));
 exports.default = router;

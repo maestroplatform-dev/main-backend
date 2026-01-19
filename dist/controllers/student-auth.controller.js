@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.StudentAuthController = void 0;
 const otp_service_1 = require("../services/otp.service");
 const student_service_1 = require("../services/student.service");
+const package_card_service_1 = require("../services/package-card.service");
 const types_1 = require("../types");
 const logger_1 = __importDefault(require("../utils/logger"));
 const validation_1 = require("../utils/validation");
@@ -174,6 +175,28 @@ class StudentAuthController {
                         onboarding_status: student.onboarding_status,
                         created_at: student.created_at,
                     },
+                },
+            });
+        }
+        catch (error) {
+            next(error);
+        }
+    }
+    /**
+     * GET /api/v1/student/package-card
+     * Get package card points for the student (requires authentication)
+     */
+    static async getPackageCard(req, res, next) {
+        try {
+            const userId = req.user?.id;
+            if (!userId) {
+                throw new types_1.AppError(401, 'User not authenticated', 'NOT_AUTHENTICATED');
+            }
+            const card = await package_card_service_1.PackageCardService.getForStudent(userId);
+            res.json({
+                success: true,
+                data: {
+                    package_card: card,
                 },
             });
         }

@@ -51,6 +51,15 @@ CREATE TABLE IF NOT EXISTS public.teacher_availability (
   is_recurring BOOLEAN DEFAULT true
 );
 
+ALTER TABLE public.teacher_instruments
+  ADD COLUMN IF NOT EXISTS package_card_points JSONB;
+
+ALTER TABLE public.teacher_instruments
+  ADD COLUMN IF NOT EXISTS one_on_one_price_inr DECIMAL(10, 2);
+
+ALTER TABLE public.teachers
+  ADD COLUMN IF NOT EXISTS starting_price_inr DECIMAL(10, 2);
+
 CREATE TABLE IF NOT EXISTS public.payments (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL,
@@ -71,6 +80,31 @@ CREATE TABLE IF NOT EXISTS public.reviews (
   rating INTEGER NOT NULL CHECK (rating >= 1 AND rating <= 5),
   comment TEXT,
   created_at TIMESTAMPTZ(6) DEFAULT NOW()
+);
+
+-- Student level (beginner/intermediate/advanced)
+DO $$ BEGIN
+  CREATE TYPE public.instrument_level AS ENUM ('beginner', 'intermediate', 'advanced');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+
+ALTER TABLE public.students ADD COLUMN IF NOT EXISTS level public.instrument_level DEFAULT 'beginner';
+
+-- Package card templates (4 bullet points per level)
+CREATE TABLE IF NOT EXISTS public.package_card_templates (
+  level public.instrument_level PRIMARY KEY,
+  points TEXT[] NOT NULL DEFAULT '{}',
+  created_at TIMESTAMPTZ(6) DEFAULT NOW(),
+  updated_at TIMESTAMPTZ(6) DEFAULT NOW()
+);
+
+-- Optional per-student overrides
+CREATE TABLE IF NOT EXISTS public.student_package_card_overrides (
+  student_id UUID PRIMARY KEY REFERENCES public.students(id) ON DELETE CASCADE,
+  points TEXT[] NOT NULL DEFAULT '{}',
+  created_at TIMESTAMPTZ(6) DEFAULT NOW(),
+  updated_at TIMESTAMPTZ(6) DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_class_packages_teacher ON public.class_packages(teacher_id);

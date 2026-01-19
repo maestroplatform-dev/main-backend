@@ -13,6 +13,7 @@ export declare class AuthService {
     }>;
     static getCurrentUser(userId: string): Promise<{
         students: {
+            level: import(".prisma/client").$Enums.instrument_level;
             id: string;
             created_at: Date | null;
             name: string | null;
@@ -36,6 +37,7 @@ export declare class AuthService {
             current_city: string | null;
             date_of_birth: Date | null;
             engagement_type: string | null;
+            starting_price_inr: import("@prisma/client-runtime-utils").Decimal | null;
             international_premium: import("@prisma/client-runtime-utils").Decimal | null;
             media_consent: boolean | null;
             music_experience_years: number | null;

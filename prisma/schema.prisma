@@ -531,13 +531,39 @@ model students {
   guardian_name       String?
   guardian_phone      String?
   onboarding_status   String               @default("email_entry")
+  level               instrument_level     @default(beginner)
   profile_picture_url String?
   signup_method       String               @default("email")
   updated_at          DateTime?            @default(now()) @db.Timestamptz(6)
   bookings            bookings[]
+  package_card_override student_package_card_overrides?
   purchased_packages  purchased_packages[]
   reviews             reviews[]
   profiles            profiles             @relation(fields: [id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@schema("public")
+}
+
+/// Per-level package card copy shown to students (4 bullet points)
+/// Admin can configure these templates per level.
+model package_card_templates {
+  level      instrument_level @id
+  points     String[]         @default([])
+  created_at DateTime         @default(now()) @db.Timestamptz(6)
+  updated_at DateTime         @default(now()) @db.Timestamptz(6)
+
+  @@schema("public")
+}
+
+/// Optional per-student override for the package card points.
+/// If present, it overrides the template for that student's level.
+model student_package_card_overrides {
+  student_id String   @id @db.Uuid
+  points     String[] @default([])
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime @default(now()) @db.Timestamptz(6)
+
+  students students @relation(fields: [student_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@schema("public")
 }
@@ -566,6 +592,7 @@ model teachers {
   current_city                 String?
   date_of_birth                DateTime?              @db.Date
   engagement_type              String?
+  starting_price_inr           Decimal?               @db.Decimal(10, 2)
   international_premium        Decimal?               @db.Decimal(10, 2)
   media_consent                Boolean?               @default(false)
   music_experience_years       Int?
@@ -653,6 +680,8 @@ model teacher_instruments {
   instrument               String
   teach_or_perform         String
   base_price               Decimal?                   @db.Decimal(10, 2)
+  one_on_one_price_inr      Decimal?                   @db.Decimal(10, 2)
+  package_card_points      Json?                      @db.Json
   created_at               DateTime                   @default(now()) @db.Timestamptz(6)
   updated_at               DateTime                   @default(now()) @db.Timestamptz(6)
   class_mode               class_mode?

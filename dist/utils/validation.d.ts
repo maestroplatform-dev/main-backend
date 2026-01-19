@@ -45,12 +45,33 @@ export declare const studentCompleteGoogleSignupSchema: z.ZodObject<{
 export declare const studentUpdateProfilePictureSchema: z.ZodObject<{
     picture_url: z.ZodString;
 }, z.core.$strip>;
+export declare const studentLevelSchema: z.ZodEnum<{
+    beginner: "beginner";
+    intermediate: "intermediate";
+    advanced: "advanced";
+}>;
+export declare const packageCardPointsSchema: z.ZodArray<z.ZodString>;
+export declare const adminUpsertPackageCardTemplateSchema: z.ZodObject<{
+    points: z.ZodArray<z.ZodString>;
+}, z.core.$strip>;
+export declare const adminUpdateStudentPackageCardSchema: z.ZodObject<{
+    level: z.ZodOptional<z.ZodEnum<{
+        beginner: "beginner";
+        intermediate: "intermediate";
+        advanced: "advanced";
+    }>>;
+    points: z.ZodOptional<z.ZodArray<z.ZodString>>;
+    clear_override: z.ZodOptional<z.ZodBoolean>;
+}, z.core.$strip>;
 export type StudentSendOTPInput = z.infer<typeof studentSendOTPSchema>;
 export type StudentVerifyOTPInput = z.infer<typeof studentVerifyOTPSchema>;
 export type StudentResendOTPInput = z.infer<typeof studentResendOTPSchema>;
 export type StudentCompleteEmailSignupInput = z.infer<typeof studentCompleteEmailSignupSchema>;
 export type StudentCompleteGoogleSignupInput = z.infer<typeof studentCompleteGoogleSignupSchema>;
 export type StudentUpdateProfilePictureInput = z.infer<typeof studentUpdateProfilePictureSchema>;
+export type StudentLevelInput = z.infer<typeof studentLevelSchema>;
+export type AdminUpsertPackageCardTemplateInput = z.infer<typeof adminUpsertPackageCardTemplateSchema>;
+export type AdminUpdateStudentPackageCardInput = z.infer<typeof adminUpdateStudentPackageCardSchema>;
 export declare const teacherCompleteOnboardingSchema: z.ZodObject<{
     phone: z.ZodString;
     date_of_birth: z.ZodString;
@@ -88,6 +109,7 @@ export declare const teacherCompleteOnboardingSchema: z.ZodObject<{
     performance_settings: z.ZodDefault<z.ZodArray<z.ZodString>>;
     performance_settings_other: z.ZodOptional<z.ZodString>;
     other_contribution: z.ZodOptional<z.ZodString>;
+    starting_price_inr: z.ZodOptional<z.ZodNumber>;
     instruments: z.ZodArray<z.ZodDiscriminatedUnion<[z.ZodObject<{
         teach_or_perform: z.ZodLiteral<"Teach">;
         instrument: z.ZodString;
@@ -95,6 +117,7 @@ export declare const teacherCompleteOnboardingSchema: z.ZodObject<{
             online: "online";
             offline: "offline";
         }>;
+        one_on_one_price_inr: z.ZodOptional<z.ZodNumber>;
         tiers: z.ZodArray<z.ZodObject<{
             level: z.ZodEnum<{
                 beginner: "beginner";
@@ -104,11 +127,46 @@ export declare const teacherCompleteOnboardingSchema: z.ZodObject<{
             price_inr: z.ZodNumber;
             platform_markup_inr: z.ZodOptional<z.ZodNumber>;
         }, z.core.$strip>>;
+        package_card_points: z.ZodObject<{
+            beginner: z.ZodObject<{
+                "10": z.ZodArray<z.ZodString>;
+                "20": z.ZodArray<z.ZodString>;
+                "30": z.ZodArray<z.ZodString>;
+            }, z.core.$strip>;
+            intermediate: z.ZodObject<{
+                "10": z.ZodArray<z.ZodString>;
+                "20": z.ZodArray<z.ZodString>;
+                "30": z.ZodArray<z.ZodString>;
+            }, z.core.$strip>;
+            advanced: z.ZodObject<{
+                "10": z.ZodArray<z.ZodString>;
+                "20": z.ZodArray<z.ZodString>;
+                "30": z.ZodArray<z.ZodString>;
+            }, z.core.$strip>;
+        }, z.core.$strip>;
     }, z.core.$strip>, z.ZodObject<{
         teach_or_perform: z.ZodLiteral<"Perform">;
         instrument: z.ZodString;
         performance_fee_inr: z.ZodNumber;
         platform_markup_inr: z.ZodOptional<z.ZodNumber>;
+        one_on_one_price_inr: z.ZodOptional<z.ZodNumber>;
+        package_card_points: z.ZodObject<{
+            beginner: z.ZodObject<{
+                "10": z.ZodArray<z.ZodString>;
+                "20": z.ZodArray<z.ZodString>;
+                "30": z.ZodArray<z.ZodString>;
+            }, z.core.$strip>;
+            intermediate: z.ZodObject<{
+                "10": z.ZodArray<z.ZodString>;
+                "20": z.ZodArray<z.ZodString>;
+                "30": z.ZodArray<z.ZodString>;
+            }, z.core.$strip>;
+            advanced: z.ZodObject<{
+                "10": z.ZodArray<z.ZodString>;
+                "20": z.ZodArray<z.ZodString>;
+                "30": z.ZodArray<z.ZodString>;
+            }, z.core.$strip>;
+        }, z.core.$strip>;
     }, z.core.$strip>], "teach_or_perform">>;
     open_to_international: z.ZodDefault<z.ZodBoolean>;
     international_premium: z.ZodDefault<z.ZodNumber>;

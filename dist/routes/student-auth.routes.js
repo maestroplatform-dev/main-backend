@@ -64,6 +64,12 @@ studentAuthRouter.post('/complete-profile-google', (0, asyncHandler_1.asyncHandl
  */
 studentAuthRouter.get('/profile', (0, asyncHandler_1.asyncHandler)(student_auth_controller_1.StudentAuthController.getProfile));
 /**
+ * @route GET /api/v1/student/package-card
+ * @desc Get student package card points (requires authentication)
+ * @returns { success: boolean, data: { package_card: { level, points, source } } }
+ */
+studentAuthRouter.get('/package-card', (0, asyncHandler_1.asyncHandler)(student_auth_controller_1.StudentAuthController.getPackageCard));
+/**
  * @route PUT /api/v1/student/profile/picture
  * @desc Update student profile picture (requires authentication)
  * @body { picture_url: string }

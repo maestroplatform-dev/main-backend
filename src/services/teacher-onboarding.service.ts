@@ -36,6 +36,7 @@ export class TeacherOnboardingService {
             professional_experience: data.professional_experience,
             youtube_links: data.youtube_links,
             engagement_type: data.engagement_type,
+            starting_price_inr: data.starting_price_inr ?? null,
             open_to_international: data.open_to_international,
             international_premium: data.open_to_international ? data.international_premium : 0,
             onboarding_completed: true,
@@ -121,8 +122,10 @@ export class TeacherOnboardingService {
                 teach_or_perform: inst.teach_or_perform,
                 class_mode: inst.class_mode,
                 base_price: null,
+                one_on_one_price_inr: inst.one_on_one_price_inr ?? null,
                 performance_fee_inr: null,
                 performance_fee_foreign: null,
+                package_card_points: inst.package_card_points || null,
               },
             })
 
@@ -152,6 +155,7 @@ export class TeacherOnboardingService {
                 teach_or_perform: inst.teach_or_perform,
                 class_mode: null,
                 base_price: null,
+                one_on_one_price_inr: inst.one_on_one_price_inr ?? null,
                 // Teacher performance fee and optional platform markup
                 performance_fee_inr: inst.performance_fee_inr,
                 performance_platform_markup_inr: inst.platform_markup_inr ?? null,
@@ -160,6 +164,7 @@ export class TeacherOnboardingService {
                     ? inst.performance_fee_inr + data.international_premium
                     : null,
                 // Removed open_to_international and international_premium
+                package_card_points: inst.package_card_points || null,
               },
             })
           }
@@ -207,12 +212,39 @@ export class TeacherOnboardingService {
       },
     })
 
+    const normalize = (raw: any) => {
+      if (!raw) return null
+      const levels = ['beginner', 'intermediate', 'advanced'] as const
+      const sessions = ['10', '20', '30'] as const
+      const out: any = {}
+      for (const level of levels) {
+        const val = raw[level]
+        if (!val) {
+          out[level] = { '10': ['', '', '', ''], '20': ['', '', '', ''], '30': ['', '', '', ''] }
+        } else if (Array.isArray(val)) {
+          out[level] = { '10': val, '20': val, '30': val }
+        } else {
+          out[level] = {
+            '10': val['10'] || ['', '', '', ''],
+            '20': val['20'] || ['', '', '', ''],
+            '30': val['30'] || ['', '', '', ''],
+          }
+        }
+      }
+      return out
+    }
+
+    const normalizedInstruments = instruments.map((inst: any) => ({
+      ...inst,
+      package_card_points: normalize(inst.package_card_points),
+    }))
+
     return {
       ...teacher,
       teacher_languages: languages,
       teacher_engagements: engagements,
       teacher_formats: formats,
-      teacher_instruments: instruments,
+      teacher_instruments: normalizedInstruments,
     }
   }
 }

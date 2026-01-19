@@ -68,6 +68,27 @@ export class TeacherService {
       throw new AppError(404, 'Teacher not found', 'TEACHER_NOT_FOUND')
     }
 
+    const normalize = (raw: any) => {
+      if (!raw) return null
+      const levels = ['beginner', 'intermediate', 'advanced'] as const
+      const out: any = {}
+      for (const level of levels) {
+        const val = raw[level]
+        if (!val) {
+          out[level] = { '10': ['', '', '', ''], '20': ['', '', '', ''], '30': ['', '', '', ''] }
+        } else if (Array.isArray(val)) {
+          out[level] = { '10': val, '20': val, '30': val }
+        } else {
+          out[level] = {
+            '10': val['10'] || ['', '', '', ''],
+            '20': val['20'] || ['', '', '', ''],
+            '30': val['30'] || ['', '', '', ''],
+          }
+        }
+      }
+      return out
+    }
+
     // Compute minimum student-facing starting price from all instruments and tiers
     let minPrice: number | null = null
     if (teacher.teacher_instruments && teacher.teacher_instruments.length > 0) {
@@ -111,6 +132,10 @@ export class TeacherService {
 
     return {
       ...teacher,
+      teacher_instruments: teacher.teacher_instruments?.map((inst: any) => ({
+        ...inst,
+        package_card_points: normalize(inst.package_card_points),
+      })) || [],
       starting_price: minPrice,
     }
   }
@@ -208,8 +233,33 @@ export class TeacherService {
         })
       }
 
+      const normalize = (raw: any) => {
+        if (!raw) return null
+        const levels = ['beginner', 'intermediate', 'advanced'] as const
+        const out: any = {}
+        for (const level of levels) {
+          const val = raw[level]
+          if (!val) {
+            out[level] = { '10': ['', '', '', ''], '20': ['', '', '', ''], '30': ['', '', '', ''] }
+          } else if (Array.isArray(val)) {
+            out[level] = { '10': val, '20': val, '30': val }
+          } else {
+            out[level] = {
+              '10': val['10'] || ['', '', '', ''],
+              '20': val['20'] || ['', '', '', ''],
+              '30': val['30'] || ['', '', '', ''],
+            }
+          }
+        }
+        return out
+      }
+
       return {
         ...teacher,
+        teacher_instruments: teacher.teacher_instruments?.map((inst: any) => ({
+          ...inst,
+          package_card_points: normalize(inst.package_card_points),
+        })) || [],
         starting_price: minPrice,
       }
     })

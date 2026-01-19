@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.AdminController = void 0;
 const types_1 = require("../types");
 const admin_service_1 = require("../services/admin.service");
+const package_card_service_1 = require("../services/package-card.service");
 const validation_1 = require("../utils/validation");
 const teacher_onboarding_service_1 = require("../services/teacher-onboarding.service");
 const database_1 = __importDefault(require("../config/database"));
@@ -157,6 +158,41 @@ class AdminController {
             success: true,
             data: result.logs,
             meta: result.pagination,
+        });
+    }
+    // GET /api/v1/admin/package-card-templates
+    static async listPackageCardTemplates(_req, res) {
+        const templates = await package_card_service_1.PackageCardService.listTemplates();
+        res.json({
+            success: true,
+            data: { templates },
+        });
+    }
+    // PUT /api/v1/admin/package-card-templates/:level
+    static async upsertPackageCardTemplate(req, res) {
+        const level = validation_1.studentLevelSchema.parse(req.params.level);
+        const { points } = validation_1.adminUpsertPackageCardTemplateSchema.parse(req.body);
+        const template = await package_card_service_1.PackageCardService.upsertTemplate(level, points);
+        res.json({
+            success: true,
+            data: { template },
+        });
+    }
+    // PUT /api/v1/admin/students/:id/package-card
+    static async updateStudentPackageCard(req, res) {
+        const studentId = req.params.id;
+        if (!studentId) {
+            throw new types_1.AppError(400, 'Student ID is required', 'VALIDATION_ERROR');
+        }
+        const parsed = validation_1.adminUpdateStudentPackageCardSchema.parse(req.body);
+        const updated = await package_card_service_1.PackageCardService.updateStudentPackageCard(studentId, {
+            level: parsed.level,
+            points: parsed.points,
+            clearOverride: parsed.clear_override,
+        });
+        res.json({
+            success: true,
+            data: { package_card: updated },
         });
     }
 }

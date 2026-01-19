@@ -21,6 +21,31 @@ router.post('/teachers/register', apiLimiter, authenticateUser, requireRole('adm
 router.get('/users', apiLimiter, authenticateUser, requireRole('admin'), asyncHandler(AdminController.listUsers))
 router.patch('/users/:id/status', apiLimiter, authenticateUser, requireRole('admin'), asyncHandler(AdminController.updateUserStatus))
 
+// Package card configuration
+router.get(
+	'/package-card-templates',
+	apiLimiter,
+	authenticateUser,
+	requireRole('admin'),
+	asyncHandler(AdminController.listPackageCardTemplates)
+)
+
+router.put(
+	'/package-card-templates/:level',
+	apiLimiter,
+	authenticateUser,
+	requireRole('admin'),
+	asyncHandler(AdminController.upsertPackageCardTemplate)
+)
+
+router.put(
+	'/students/:id/package-card',
+	apiLimiter,
+	authenticateUser,
+	requireRole('admin'),
+	asyncHandler(AdminController.updateStudentPackageCard)
+)
+
 // Audit logs
 router.get('/audit-logs', apiLimiter, authenticateUser, requireRole('admin'), asyncHandler(AdminController.getAuditLogs))
 

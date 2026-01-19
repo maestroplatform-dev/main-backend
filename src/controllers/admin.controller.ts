@@ -1,7 +1,13 @@
 import { Response } from 'express'
 import { AuthRequest, AppError } from '../types'
 import { AdminService } from '../services/admin.service'
-import { teacherCompleteOnboardingSchema } from '../utils/validation'
+import { PackageCardService } from '../services/package-card.service'
+import {
+  teacherCompleteOnboardingSchema,
+  adminUpdateStudentPackageCardSchema,
+  adminUpsertPackageCardTemplateSchema,
+  studentLevelSchema,
+} from '../utils/validation'
 import { TeacherOnboardingService } from '../services/teacher-onboarding.service'
 import prisma from '../config/database'
 import { createClient } from '@supabase/supabase-js'
@@ -187,6 +193,49 @@ export class AdminController {
       success: true,
       data: result.logs,
       meta: result.pagination,
+    })
+  }
+
+  // GET /api/v1/admin/package-card-templates
+  static async listPackageCardTemplates(_req: AuthRequest, res: Response): Promise<void> {
+    const templates = await PackageCardService.listTemplates()
+    res.json({
+      success: true,
+      data: { templates },
+    })
+  }
+
+  // PUT /api/v1/admin/package-card-templates/:level
+  static async upsertPackageCardTemplate(req: AuthRequest, res: Response): Promise<void> {
+    const level = studentLevelSchema.parse(req.params.level)
+    const { points } = adminUpsertPackageCardTemplateSchema.parse(req.body)
+
+    const template = await PackageCardService.upsertTemplate(level, points)
+
+    res.json({
+      success: true,
+      data: { template },
+    })
+  }
+
+  // PUT /api/v1/admin/students/:id/package-card
+  static async updateStudentPackageCard(req: AuthRequest, res: Response): Promise<void> {
+    const studentId = req.params.id
+    if (!studentId) {
+      throw new AppError(400, 'Student ID is required', 'VALIDATION_ERROR')
+    }
+
+    const parsed = adminUpdateStudentPackageCardSchema.parse(req.body)
+
+    const updated = await PackageCardService.updateStudentPackageCard(studentId, {
+      level: parsed.level,
+      points: parsed.points,
+      clearOverride: parsed.clear_override,
+    })
+
+    res.json({
+      success: true,
+      data: { package_card: updated },
     })
   }
 }

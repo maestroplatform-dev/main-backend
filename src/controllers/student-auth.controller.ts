@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express'
 import { OTPService } from '../services/otp.service'
 import { StudentService } from '../services/student.service'
+import { PackageCardService } from '../services/package-card.service'
 import { AppError } from '../types'
 import logger from '../utils/logger'
 import {
@@ -201,6 +202,31 @@ export class StudentAuthController {
             onboarding_status: student.onboarding_status,
             created_at: student.created_at,
           },
+        },
+      })
+    } catch (error) {
+      next(error)
+    }
+  }
+
+  /**
+   * GET /api/v1/student/package-card
+   * Get package card points for the student (requires authentication)
+   */
+  static async getPackageCard(req: Request, res: Response, next: NextFunction) {
+    try {
+      const userId = (req as any).user?.id
+
+      if (!userId) {
+        throw new AppError(401, 'User not authenticated', 'NOT_AUTHENTICATED')
+      }
+
+      const card = await PackageCardService.getForStudent(userId)
+
+      res.json({
+        success: true,
+        data: {
+          package_card: card,
         },
       })
     } catch (error) {

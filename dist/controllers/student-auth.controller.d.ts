@@ -31,6 +31,11 @@ export declare class StudentAuthController {
      */
     static getProfile(req: Request, res: Response, next: NextFunction): Promise<void>;
     /**
+     * GET /api/v1/student/package-card
+     * Get package card points for the student (requires authentication)
+     */
+    static getPackageCard(req: Request, res: Response, next: NextFunction): Promise<void>;
+    /**
      * PUT /api/v1/student/profile/picture
      * Update student profile picture (requires authentication)
      */

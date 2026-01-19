@@ -397,8 +397,10 @@ class AdminService {
                         teach_or_perform: true,
                         class_mode: true,
                         base_price: true,
+                        one_on_one_price_inr: true,
                         performance_fee_inr: true,
                         performance_fee_foreign: true,
+                        package_card_points: true,
                         teacher_instrument_tiers: {
                             select: {
                                 level: true,
@@ -488,6 +490,48 @@ class AdminService {
         }
         return {
             ...teacher,
+            teacher_instruments: teacher.teacher_instruments?.map((inst) => {
+                const normalize = (raw) => {
+                    if (!raw)
+                        return null;
+                    const levels = ['beginner', 'intermediate', 'advanced'];
+                    const sessions = ['10', '20', '30'];
+                    const out = {};
+                    for (const level of levels) {
+                        const val = raw[level];
+                        if (!val) {
+                            out[level] = { '10': ['', '', '', ''], '20': ['', '', '', ''], '30': ['', '', '', ''] };
+                        }
+                        else if (Array.isArray(val)) {
+                            // old shape -> replicate to all session buckets
+                            out[level] = { '10': val, '20': val, '30': val };
+                        }
+                        else {
+                            out[level] = {
+                                '10': val['10'] || ['', '', '', ''],
+                                '20': val['20'] || ['', '', '', ''],
+                                '30': val['30'] || ['', '', '', ''],
+                            };
+                        }
+                    }
+                    return out;
+                };
+                return {
+                    id: inst.id,
+                    instrument: inst.instrument,
+                    teach_or_perform: inst.teach_or_perform,
+                    class_mode: inst.class_mode,
+                    one_on_one_price_inr: inst.one_on_one_price_inr,
+                    performance_fee_inr: inst.performance_fee_inr,
+                    package_card_points: normalize(inst.package_card_points),
+                    tiers: inst.teacher_instrument_tiers?.map((tier) => ({
+                        level: tier.level,
+                        price_inr: tier.price_inr && typeof tier.price_inr === 'object' && typeof tier.price_inr.toNumber === 'function'
+                            ? tier.price_inr.toNumber()
+                            : tier.price_inr,
+                    })) || [],
+                };
+            }) || [],
             statistics: {
                 totalBookings: teacher._count?.bookings || 0,
                 totalReviews: teacher._count?.reviews || 0,
@@ -497,6 +541,7 @@ class AdminService {
             engagement: teacher.teacher_engagements || null,
             formats: teacher.teacher_formats || null,
             starting_price: minPrice,
+            starting_price_inr: teacher.starting_price_inr ?? null,
         };
     }
     // Get all users with filters

@@ -10,6 +10,7 @@ export declare class TeacherService {
         current_city: string | null;
         date_of_birth: Date | null;
         engagement_type: string | null;
+        starting_price_inr: import("@prisma/client-runtime-utils").Decimal | null;
         international_premium: import("@prisma/client-runtime-utils").Decimal | null;
         media_consent: boolean | null;
         music_experience_years: number | null;
@@ -29,6 +30,7 @@ export declare class TeacherService {
         youtube_links: string[];
     }>;
     static getProfile(teacherId: string): Promise<{
+        teacher_instruments: any[];
         starting_price: null;
         profiles: {
             id: string;
@@ -59,6 +61,7 @@ export declare class TeacherService {
                     name: string | null;
                 };
             } & {
+                level: import(".prisma/client").$Enums.instrument_level;
                 id: string;
                 created_at: Date | null;
                 name: string | null;
@@ -75,8 +78,8 @@ export declare class TeacherService {
         } & {
             id: string;
             created_at: Date | null;
-            teacher_id: string;
             student_id: string;
+            teacher_id: string;
             booking_id: string | null;
             rating: number;
             comment: string | null;
@@ -108,31 +111,6 @@ export declare class TeacherService {
             other_contribution: string | null;
             teacher_id: string;
         } | null;
-        teacher_instruments: ({
-            teacher_instrument_tiers: {
-                level: import(".prisma/client").$Enums.instrument_level;
-                id: string;
-                created_at: Date;
-                updated_at: Date;
-                price_inr: import("@prisma/client-runtime-utils").Decimal;
-                platform_markup_inr: import("@prisma/client-runtime-utils").Decimal | null;
-                teacher_instrument_id: string;
-                mode: import(".prisma/client").$Enums.class_mode;
-                price_foreign: import("@prisma/client-runtime-utils").Decimal | null;
-            }[];
-        } & {
-            id: string;
-            created_at: Date;
-            updated_at: Date;
-            teach_or_perform: string;
-            instrument: string;
-            class_mode: import(".prisma/client").$Enums.class_mode | null;
-            performance_fee_inr: import("@prisma/client-runtime-utils").Decimal | null;
-            teacher_id: string;
-            base_price: import("@prisma/client-runtime-utils").Decimal | null;
-            performance_fee_foreign: import("@prisma/client-runtime-utils").Decimal | null;
-            performance_platform_markup_inr: import("@prisma/client-runtime-utils").Decimal | null;
-        })[];
         teacher_languages: {
             id: string;
             created_at: Date;
@@ -148,6 +126,7 @@ export declare class TeacherService {
         current_city: string | null;
         date_of_birth: Date | null;
         engagement_type: string | null;
+        starting_price_inr: import("@prisma/client-runtime-utils").Decimal | null;
         international_premium: import("@prisma/client-runtime-utils").Decimal | null;
         media_consent: boolean | null;
         music_experience_years: number | null;
@@ -176,6 +155,7 @@ export declare class TeacherService {
         current_city: string | null;
         date_of_birth: Date | null;
         engagement_type: string | null;
+        starting_price_inr: import("@prisma/client-runtime-utils").Decimal | null;
         international_premium: import("@prisma/client-runtime-utils").Decimal | null;
         media_consent: boolean | null;
         music_experience_years: number | null;

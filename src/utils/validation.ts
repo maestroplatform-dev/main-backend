@@ -60,6 +60,30 @@ export const studentUpdateProfilePictureSchema = z.object({
   picture_url: z.string().url('Invalid picture URL'),
 })
 
+// ============================================================
+// PACKAGE CARD (STUDENT DASHBOARD)
+// ============================================================
+
+export const studentLevelSchema = z.enum(['beginner', 'intermediate', 'advanced'])
+
+export const packageCardPointsSchema = z
+  .array(z.string().min(1, 'Point cannot be empty').max(160, 'Point too long'))
+  .length(4, 'Package card must have exactly 4 points')
+
+export const adminUpsertPackageCardTemplateSchema = z.object({
+  points: packageCardPointsSchema,
+})
+
+export const adminUpdateStudentPackageCardSchema = z
+  .object({
+    level: studentLevelSchema.optional(),
+    points: packageCardPointsSchema.optional(),
+    clear_override: z.boolean().optional(),
+  })
+  .refine((val) => val.level || val.points || val.clear_override, {
+    message: 'Provide at least one of level, points, or clear_override',
+  })
+
 // Types
 export type StudentSendOTPInput = z.infer<typeof studentSendOTPSchema>
 export type StudentVerifyOTPInput = z.infer<typeof studentVerifyOTPSchema>
@@ -67,6 +91,10 @@ export type StudentResendOTPInput = z.infer<typeof studentResendOTPSchema>
 export type StudentCompleteEmailSignupInput = z.infer<typeof studentCompleteEmailSignupSchema>
 export type StudentCompleteGoogleSignupInput = z.infer<typeof studentCompleteGoogleSignupSchema>
 export type StudentUpdateProfilePictureInput = z.infer<typeof studentUpdateProfilePictureSchema>
+
+export type StudentLevelInput = z.infer<typeof studentLevelSchema>
+export type AdminUpsertPackageCardTemplateInput = z.infer<typeof adminUpsertPackageCardTemplateSchema>
+export type AdminUpdateStudentPackageCardInput = z.infer<typeof adminUpdateStudentPackageCardSchema>
 
 // ============================================================
 // TEACHER ONBOARDING SCHEMAS (EXISTING)
@@ -88,7 +116,7 @@ export const teacherCompleteOnboardingSchema = z.object({
   
   // Profile Details (optional fields)
   demo: z.boolean().optional(),
-  tagline: z.string().max(150, 'Tagline must not exceed 150 characters').optional(),
+  tagline: z.string().max(50, 'Tagline must not exceed 50 characters').optional(),
   bio: z.string().optional(),
   teaching_style: z.string().optional(),
   education: z.string().optional(),
@@ -117,6 +145,9 @@ export const teacherCompleteOnboardingSchema = z.object({
   
   other_contribution: z.string().optional(),
 
+  // Global pricing
+  starting_price_inr: z.number().nonnegative().optional(),
+
   // Step 4: Instruments & Pricing (Teach vs Perform)
   instruments: z
     .array(
@@ -125,6 +156,7 @@ export const teacherCompleteOnboardingSchema = z.object({
           teach_or_perform: z.literal('Teach'),
           instrument: z.string().min(1),
           class_mode: z.enum(['online', 'offline']),
+          one_on_one_price_inr: z.number().nonnegative().optional(),
           tiers: z
             .array(
               z.object({
@@ -136,6 +168,23 @@ export const teacherCompleteOnboardingSchema = z.object({
               })
             )
             .length(3, 'Provide beginner, intermediate, and advanced pricing'),
+          package_card_points: z.object({
+            beginner: z.object({
+              "10": z.array(z.string().min(1)).length(4),
+              "20": z.array(z.string().min(1)).length(4),
+              "30": z.array(z.string().min(1)).length(4),
+            }),
+            intermediate: z.object({
+              "10": z.array(z.string().min(1)).length(4),
+              "20": z.array(z.string().min(1)).length(4),
+              "30": z.array(z.string().min(1)).length(4),
+            }),
+            advanced: z.object({
+              "10": z.array(z.string().min(1)).length(4),
+              "20": z.array(z.string().min(1)).length(4),
+              "30": z.array(z.string().min(1)).length(4),
+            }),
+          }),
         }),
         z.object({
           teach_or_perform: z.literal('Perform'),
@@ -144,6 +193,24 @@ export const teacherCompleteOnboardingSchema = z.object({
           performance_fee_inr: z.number().positive(),
           // Optional platform markup on performance bookings
           platform_markup_inr: z.number().nonnegative().optional(),
+          one_on_one_price_inr: z.number().nonnegative().optional(),
+          package_card_points: z.object({
+            beginner: z.object({
+              "10": z.array(z.string().min(1)).length(4),
+              "20": z.array(z.string().min(1)).length(4),
+              "30": z.array(z.string().min(1)).length(4),
+            }),
+            intermediate: z.object({
+              "10": z.array(z.string().min(1)).length(4),
+              "20": z.array(z.string().min(1)).length(4),
+              "30": z.array(z.string().min(1)).length(4),
+            }),
+            advanced: z.object({
+              "10": z.array(z.string().min(1)).length(4),
+              "20": z.array(z.string().min(1)).length(4),
+              "30": z.array(z.string().min(1)).length(4),
+            }),
+          }),
         }),
       ])
     )

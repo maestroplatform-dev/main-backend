@@ -37,6 +37,7 @@ export declare class StudentService {
             name: string | null;
         };
         student: {
+            level: import(".prisma/client").$Enums.instrument_level;
             id: string;
             created_at: Date | null;
             name: string | null;
@@ -64,6 +65,7 @@ export declare class StudentService {
             name: string | null;
         };
         student: {
+            level: import(".prisma/client").$Enums.instrument_level;
             id: string;
             created_at: Date | null;
             name: string | null;
@@ -90,6 +92,7 @@ export declare class StudentService {
             name: string | null;
         };
     } & {
+        level: import(".prisma/client").$Enums.instrument_level;
         id: string;
         created_at: Date | null;
         name: string | null;
@@ -107,6 +110,7 @@ export declare class StudentService {
      * Update profile picture
      */
     static updateProfilePicture(userId: string, pictureUrl: string): Promise<{
+        level: import(".prisma/client").$Enums.instrument_level;
         id: string;
         created_at: Date | null;
         name: string | null;
@@ -124,6 +128,7 @@ export declare class StudentService {
      * Get student by email
      */
     static getStudentByEmail(email: string): Promise<{
+        level: import(".prisma/client").$Enums.instrument_level;
         id: string;
         created_at: Date | null;
         name: string | null;
@@ -141,6 +146,7 @@ export declare class StudentService {
      * Update student onboarding status
      */
     static updateOnboardingStatus(userId: string, status: string): Promise<{
+        level: import(".prisma/client").$Enums.instrument_level;
         id: string;
         created_at: Date | null;
         name: string | null;

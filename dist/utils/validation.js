@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.teacherProfileUpdateSchema = exports.teacherOnboardingSchema = exports.teacherCompleteOnboardingSchema = exports.studentUpdateProfilePictureSchema = exports.studentCompleteGoogleSignupSchema = exports.studentCompleteEmailSignupSchema = exports.studentResendOTPSchema = exports.studentVerifyOTPSchema = exports.studentSendOTPSchema = exports.registerSchema = void 0;
+exports.teacherProfileUpdateSchema = exports.teacherOnboardingSchema = exports.teacherCompleteOnboardingSchema = exports.adminUpdateStudentPackageCardSchema = exports.adminUpsertPackageCardTemplateSchema = exports.packageCardPointsSchema = exports.studentLevelSchema = exports.studentUpdateProfilePictureSchema = exports.studentCompleteGoogleSignupSchema = exports.studentCompleteEmailSignupSchema = exports.studentResendOTPSchema = exports.studentVerifyOTPSchema = exports.studentSendOTPSchema = exports.registerSchema = void 0;
 const zod_1 = require("zod");
 // Auth validation schemas
 exports.registerSchema = zod_1.z.object({
@@ -55,6 +55,25 @@ exports.studentUpdateProfilePictureSchema = zod_1.z.object({
     picture_url: zod_1.z.string().url('Invalid picture URL'),
 });
 // ============================================================
+// PACKAGE CARD (STUDENT DASHBOARD)
+// ============================================================
+exports.studentLevelSchema = zod_1.z.enum(['beginner', 'intermediate', 'advanced']);
+exports.packageCardPointsSchema = zod_1.z
+    .array(zod_1.z.string().min(1, 'Point cannot be empty').max(160, 'Point too long'))
+    .length(4, 'Package card must have exactly 4 points');
+exports.adminUpsertPackageCardTemplateSchema = zod_1.z.object({
+    points: exports.packageCardPointsSchema,
+});
+exports.adminUpdateStudentPackageCardSchema = zod_1.z
+    .object({
+    level: exports.studentLevelSchema.optional(),
+    points: exports.packageCardPointsSchema.optional(),
+    clear_override: zod_1.z.boolean().optional(),
+})
+    .refine((val) => val.level || val.points || val.clear_override, {
+    message: 'Provide at least one of level, points, or clear_override',
+});
+// ============================================================
 // TEACHER ONBOARDING SCHEMAS (EXISTING)
 // ============================================================
 // Comprehensive Teacher Onboarding Schema (all steps in one)
@@ -72,7 +91,7 @@ exports.teacherCompleteOnboardingSchema = zod_1.z.object({
     profile_picture: zod_1.z.string().url('Invalid picture URL').optional(),
     // Profile Details (optional fields)
     demo: zod_1.z.boolean().optional(),
-    tagline: zod_1.z.string().max(150, 'Tagline must not exceed 150 characters').optional(),
+    tagline: zod_1.z.string().max(50, 'Tagline must not exceed 50 characters').optional(),
     bio: zod_1.z.string().optional(),
     teaching_style: zod_1.z.string().optional(),
     education: zod_1.z.string().optional(),
@@ -96,6 +115,8 @@ exports.teacherCompleteOnboardingSchema = zod_1.z.object({
     performance_settings: zod_1.z.array(zod_1.z.string()).default([]),
     performance_settings_other: zod_1.z.string().optional(),
     other_contribution: zod_1.z.string().optional(),
+    // Global pricing
+    starting_price_inr: zod_1.z.number().nonnegative().optional(),
     // Step 4: Instruments & Pricing (Teach vs Perform)
     instruments: zod_1.z
         .array(zod_1.z.discriminatedUnion('teach_or_perform', [
@@ -103,6 +124,7 @@ exports.teacherCompleteOnboardingSchema = zod_1.z.object({
             teach_or_perform: zod_1.z.literal('Teach'),
             instrument: zod_1.z.string().min(1),
             class_mode: zod_1.z.enum(['online', 'offline']),
+            one_on_one_price_inr: zod_1.z.number().nonnegative().optional(),
             tiers: zod_1.z
                 .array(zod_1.z.object({
                 level: zod_1.z.enum(['beginner', 'intermediate', 'advanced']),
@@ -112,6 +134,23 @@ exports.teacherCompleteOnboardingSchema = zod_1.z.object({
                 platform_markup_inr: zod_1.z.number().nonnegative().optional(),
             }))
                 .length(3, 'Provide beginner, intermediate, and advanced pricing'),
+            package_card_points: zod_1.z.object({
+                beginner: zod_1.z.object({
+                    "10": zod_1.z.array(zod_1.z.string().min(1)).length(4),
+                    "20": zod_1.z.array(zod_1.z.string().min(1)).length(4),
+                    "30": zod_1.z.array(zod_1.z.string().min(1)).length(4),
+                }),
+                intermediate: zod_1.z.object({
+                    "10": zod_1.z.array(zod_1.z.string().min(1)).length(4),
+                    "20": zod_1.z.array(zod_1.z.string().min(1)).length(4),
+                    "30": zod_1.z.array(zod_1.z.string().min(1)).length(4),
+                }),
+                advanced: zod_1.z.object({
+                    "10": zod_1.z.array(zod_1.z.string().min(1)).length(4),
+                    "20": zod_1.z.array(zod_1.z.string().min(1)).length(4),
+                    "30": zod_1.z.array(zod_1.z.string().min(1)).length(4),
+                }),
+            }),
         }),
         zod_1.z.object({
             teach_or_perform: zod_1.z.literal('Perform'),
@@ -120,6 +159,24 @@ exports.teacherCompleteOnboardingSchema = zod_1.z.object({
             performance_fee_inr: zod_1.z.number().positive(),
             // Optional platform markup on performance bookings
             platform_markup_inr: zod_1.z.number().nonnegative().optional(),
+            one_on_one_price_inr: zod_1.z.number().nonnegative().optional(),
+            package_card_points: zod_1.z.object({
+                beginner: zod_1.z.object({
+                    "10": zod_1.z.array(zod_1.z.string().min(1)).length(4),
+                    "20": zod_1.z.array(zod_1.z.string().min(1)).length(4),
+                    "30": zod_1.z.array(zod_1.z.string().min(1)).length(4),
+                }),
+                intermediate: zod_1.z.object({
+                    "10": zod_1.z.array(zod_1.z.string().min(1)).length(4),
+                    "20": zod_1.z.array(zod_1.z.string().min(1)).length(4),
+                    "30": zod_1.z.array(zod_1.z.string().min(1)).length(4),
+                }),
+                advanced: zod_1.z.object({
+                    "10": zod_1.z.array(zod_1.z.string().min(1)).length(4),
+                    "20": zod_1.z.array(zod_1.z.string().min(1)).length(4),
+                    "30": zod_1.z.array(zod_1.z.string().min(1)).length(4),
+                }),
+            }),
         }),
     ]))
         .min(1),

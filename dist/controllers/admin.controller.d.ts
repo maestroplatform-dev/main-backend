@@ -11,5 +11,8 @@ export declare class AdminController {
     static listUsers(req: AuthRequest, res: Response): Promise<void>;
     static updateUserStatus(req: AuthRequest, res: Response): Promise<void>;
     static getAuditLogs(req: AuthRequest, res: Response): Promise<void>;
+    static listPackageCardTemplates(_req: AuthRequest, res: Response): Promise<void>;
+    static upsertPackageCardTemplate(req: AuthRequest, res: Response): Promise<void>;
+    static updateStudentPackageCard(req: AuthRequest, res: Response): Promise<void>;
 }
 //# sourceMappingURL=admin.controller.d.ts.map

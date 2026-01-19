@@ -65,6 +65,29 @@ class TeacherService {
         if (!teacher) {
             throw new types_1.AppError(404, 'Teacher not found', 'TEACHER_NOT_FOUND');
         }
+        const normalize = (raw) => {
+            if (!raw)
+                return null;
+            const levels = ['beginner', 'intermediate', 'advanced'];
+            const out = {};
+            for (const level of levels) {
+                const val = raw[level];
+                if (!val) {
+                    out[level] = { '10': ['', '', '', ''], '20': ['', '', '', ''], '30': ['', '', '', ''] };
+                }
+                else if (Array.isArray(val)) {
+                    out[level] = { '10': val, '20': val, '30': val };
+                }
+                else {
+                    out[level] = {
+                        '10': val['10'] || ['', '', '', ''],
+                        '20': val['20'] || ['', '', '', ''],
+                        '30': val['30'] || ['', '', '', ''],
+                    };
+                }
+            }
+            return out;
+        };
         // Compute minimum student-facing starting price from all instruments and tiers
         let minPrice = null;
         if (teacher.teacher_instruments && teacher.teacher_instruments.length > 0) {
@@ -102,6 +125,10 @@ class TeacherService {
         }
         return {
             ...teacher,
+            teacher_instruments: teacher.teacher_instruments?.map((inst) => ({
+                ...inst,
+                package_card_points: normalize(inst.package_card_points),
+            })) || [],
             starting_price: minPrice,
         };
     }
@@ -182,8 +209,35 @@ class TeacherService {
                     }
                 });
             }
+            const normalize = (raw) => {
+                if (!raw)
+                    return null;
+                const levels = ['beginner', 'intermediate', 'advanced'];
+                const out = {};
+                for (const level of levels) {
+                    const val = raw[level];
+                    if (!val) {
+                        out[level] = { '10': ['', '', '', ''], '20': ['', '', '', ''], '30': ['', '', '', ''] };
+                    }
+                    else if (Array.isArray(val)) {
+                        out[level] = { '10': val, '20': val, '30': val };
+                    }
+                    else {
+                        out[level] = {
+                            '10': val['10'] || ['', '', '', ''],
+                            '20': val['20'] || ['', '', '', ''],
+                            '30': val['30'] || ['', '', '', ''],
+                        };
+                    }
+                }
+                return out;
+            };
             return {
                 ...teacher,
+                teacher_instruments: teacher.teacher_instruments?.map((inst) => ({
+                    ...inst,
+                    package_card_points: normalize(inst.package_card_points),
+                })) || [],
                 starting_price: minPrice,
             };
         });

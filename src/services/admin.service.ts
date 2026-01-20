@@ -537,7 +537,7 @@ export class AdminService {
         });
       }
 
-      return {
+      const details = {
         ...teacher,
         teacher_instruments: teacher.teacher_instruments?.map((inst: any) => {
           const normalize = (raw: any) => {
@@ -575,6 +575,9 @@ export class AdminService {
               price_inr: tier.price_inr && typeof tier.price_inr === 'object' && typeof tier.price_inr.toNumber === 'function'
                 ? tier.price_inr.toNumber()
                 : tier.price_inr,
+              base_price_inr: tier.base_price && typeof tier.base_price === 'object' && typeof tier.base_price.toNumber === 'function'
+                ? tier.base_price.toNumber()
+                : tier.base_price,
               one_on_one_price_inr: tier.one_on_one_price_inr && typeof tier.one_on_one_price_inr === 'object' && typeof tier.one_on_one_price_inr.toNumber === 'function'
                 ? tier.one_on_one_price_inr.toNumber()
                 : tier.one_on_one_price_inr,
@@ -592,6 +595,8 @@ export class AdminService {
         starting_price: minPrice,
         starting_price_inr: teacher.starting_price_inr ?? null,
       };
+      console.log('Teacher Details:', JSON.stringify(details, null, 2));
+      return details;
     }
   // Get all users with filters
   static async getUsers(params: {

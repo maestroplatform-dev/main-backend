@@ -122,7 +122,6 @@ export class TeacherOnboardingService {
                 teach_or_perform: inst.teach_or_perform,
                 class_mode: inst.class_mode,
                 base_price: null,
-                one_on_one_price_inr: inst.one_on_one_price_inr ?? null,
                 performance_fee_inr: null,
                 performance_fee_foreign: null,
                 package_card_points: inst.package_card_points || null,
@@ -141,6 +140,8 @@ export class TeacherOnboardingService {
                 price_inr: tier.price_inr,
                 platform_markup_inr: tier.platform_markup_inr ?? null,
                 price_foreign: priceForeign,
+                // Level-specific one-on-one price
+                one_on_one_price_inr: tier.one_on_one_price_inr ?? null,
               }
             })
 
@@ -155,7 +156,6 @@ export class TeacherOnboardingService {
                 teach_or_perform: inst.teach_or_perform,
                 class_mode: null,
                 base_price: null,
-                one_on_one_price_inr: inst.one_on_one_price_inr ?? null,
                 // Teacher performance fee and optional platform markup
                 performance_fee_inr: inst.performance_fee_inr,
                 performance_platform_markup_inr: inst.platform_markup_inr ?? null,

@@ -132,6 +132,8 @@ exports.teacherCompleteOnboardingSchema = zod_1.z.object({
                 price_inr: zod_1.z.number().positive(),
                 // Optional platform markup Maestera adds on top for students
                 platform_markup_inr: zod_1.z.number().nonnegative().optional(),
+                // Level-specific one-on-one price
+                one_on_one_price_inr: zod_1.z.number().nonnegative().optional(),
             }))
                 .length(3, 'Provide beginner, intermediate, and advanced pricing'),
             package_card_points: zod_1.z.object({

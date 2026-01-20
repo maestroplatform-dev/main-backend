@@ -165,6 +165,8 @@ export const teacherCompleteOnboardingSchema = z.object({
                 price_inr: z.number().positive(),
                 // Optional platform markup Maestera adds on top for students
                 platform_markup_inr: z.number().nonnegative().optional(),
+                // Level-specific one-on-one price
+                one_on_one_price_inr: z.number().nonnegative().optional(),
               })
             )
             .length(3, 'Provide beginner, intermediate, and advanced pricing'),

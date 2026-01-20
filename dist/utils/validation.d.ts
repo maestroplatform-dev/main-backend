@@ -126,6 +126,7 @@ export declare const teacherCompleteOnboardingSchema: z.ZodObject<{
             }>;
             price_inr: z.ZodNumber;
             platform_markup_inr: z.ZodOptional<z.ZodNumber>;
+            one_on_one_price_inr: z.ZodOptional<z.ZodNumber>;
         }, z.core.$strip>>;
         package_card_points: z.ZodObject<{
             beginner: z.ZodObject<{

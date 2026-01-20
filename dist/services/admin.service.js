@@ -397,18 +397,10 @@ class AdminService {
                         teach_or_perform: true,
                         class_mode: true,
                         base_price: true,
-                        one_on_one_price_inr: true,
                         performance_fee_inr: true,
                         performance_fee_foreign: true,
                         package_card_points: true,
-                        teacher_instrument_tiers: {
-                            select: {
-                                level: true,
-                                mode: true,
-                                price_inr: true,
-                                price_foreign: true,
-                            }
-                        }
+                        teacher_instrument_tiers: true,
                     }
                 },
                 reviews: {
@@ -521,7 +513,6 @@ class AdminService {
                     instrument: inst.instrument,
                     teach_or_perform: inst.teach_or_perform,
                     class_mode: inst.class_mode,
-                    one_on_one_price_inr: inst.one_on_one_price_inr,
                     performance_fee_inr: inst.performance_fee_inr,
                     package_card_points: normalize(inst.package_card_points),
                     tiers: inst.teacher_instrument_tiers?.map((tier) => ({
@@ -529,6 +520,9 @@ class AdminService {
                         price_inr: tier.price_inr && typeof tier.price_inr === 'object' && typeof tier.price_inr.toNumber === 'function'
                             ? tier.price_inr.toNumber()
                             : tier.price_inr,
+                        one_on_one_price_inr: tier.one_on_one_price_inr && typeof tier.one_on_one_price_inr === 'object' && typeof tier.one_on_one_price_inr.toNumber === 'function'
+                            ? tier.one_on_one_price_inr.toNumber()
+                            : tier.one_on_one_price_inr,
                     })) || [],
                 };
             }) || [],

@@ -11,13 +11,33 @@ if (!connectionString) {
   throw new Error('DATABASE_URL is not defined in environment variables')
 }
 
-const pool = new Pool({ connectionString })
-const adapter = new PrismaPg(pool)
+// Declare global type to hold the singleton Prisma instance
+declare global {
+  // eslint-disable-next-line no-var
+  var prismaClient: PrismaClient | undefined
+}
 
-const prisma = new PrismaClient({
-  adapter,
-  // Exclude 'query' logs from Prisma to avoid noisy SQL output in app logs
-  log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
-})
+/**
+ * Singleton Prisma client to prevent connection exhaustion
+ * in hot-reload environments (development) and pooling-limited
+ * production environments (Render / Supabase / Neon).
+ */
+function createPrismaClient(): PrismaClient {
+  const pool = new Pool({ connectionString })
+  const adapter = new PrismaPg(pool)
+
+  return new PrismaClient({
+    adapter,
+    // Only log errors (and warnings in dev) to avoid noisy SQL output
+    log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
+  })
+}
+
+// Reuse existing instance in dev (globalThis persists across hot reloads)
+const prisma: PrismaClient = globalThis.prismaClient ?? createPrismaClient()
+
+if (process.env.NODE_ENV !== 'production') {
+  globalThis.prismaClient = prisma
+}
 
 export default prisma

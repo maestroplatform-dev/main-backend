@@ -1,1 +1,0 @@
-{"version":3,"file":"teacher-onboarding.controller.d.ts","sourceRoot":"","sources":["../../src/controllers/teacher-onboarding.controller.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,QAAQ,EAAE,MAAM,SAAS,CAAA;AAClC,OAAO,EAAE,WAAW,EAAE,MAAM,UAAU,CAAA;AAKtC,qBAAa,2BAA2B;WAEzB,kBAAkB,CAAC,GAAG,EAAE,WAAW,EAAE,GAAG,EAAE,QAAQ;WAkBlD,iBAAiB,CAAC,GAAG,EAAE,WAAW,EAAE,GAAG,EAAE,QAAQ;CAU/D"}

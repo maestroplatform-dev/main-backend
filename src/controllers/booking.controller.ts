@@ -1,0 +1,317 @@
+import { Response } from "express";
+import { bookingService } from "../services/booking.service";
+import { booking_status } from "@prisma/client";
+import { AuthRequest } from "../types";
+
+export class BookingController {
+  /**
+   * POST /api/bookings/request-demo
+   * Student requests a demo class with a teacher
+   */
+  async requestDemo(req: AuthRequest, res: Response) {
+    try {
+      const studentId = req.user?.id;
+      if (!studentId) {
+        res.status(401).json({ error: "Unauthorized" });
+        return;
+      }
+
+      const { teacherId, scheduledAt, notes } = req.body;
+
+      if (!teacherId || !scheduledAt) {
+        res.status(400).json({ error: "teacherId and scheduledAt are required" });
+        return;
+      }
+
+      const booking = await bookingService.requestDemo(
+        studentId,
+        teacherId,
+        new Date(scheduledAt),
+        notes
+      );
+
+      res.status(201).json({
+        success: true,
+        message: "Demo request sent successfully",
+        data: booking,
+      });
+    } catch (error: any) {
+      console.error("Error requesting demo:", error);
+      res.status(400).json({ error: error.message || "Failed to request demo" });
+    }
+  }
+
+  /**
+   * GET /api/bookings/teacher
+   * Get all bookings for the authenticated teacher
+   */
+  async getTeacherBookings(req: AuthRequest, res: Response) {
+    try {
+      const teacherId = req.user?.id;
+      if (!teacherId) {
+        res.status(401).json({ error: "Unauthorized" });
+        return;
+      }
+
+      const statusParam = req.query.status as string | undefined;
+      let status: booking_status[] | undefined;
+      
+      if (statusParam) {
+        status = statusParam.split(",") as booking_status[];
+      }
+
+      const bookings = await bookingService.getTeacherBookings(teacherId, status);
+
+      res.json({
+        success: true,
+        data: bookings,
+      });
+    } catch (error: any) {
+      console.error("Error fetching teacher bookings:", error);
+      res.status(500).json({ error: "Failed to fetch bookings" });
+    }
+  }
+
+  /**
+   * GET /api/bookings/student
+   * Get all bookings for the authenticated student
+   */
+  async getStudentBookings(req: AuthRequest, res: Response) {
+    try {
+      const studentId = req.user?.id;
+      if (!studentId) {
+        res.status(401).json({ error: "Unauthorized" });
+        return;
+      }
+
+      const statusParam = req.query.status as string | undefined;
+      let status: booking_status[] | undefined;
+      
+      if (statusParam) {
+        status = statusParam.split(",") as booking_status[];
+      }
+
+      const bookings = await bookingService.getStudentBookings(studentId, status);
+
+      res.json({
+        success: true,
+        data: bookings,
+      });
+    } catch (error: any) {
+      console.error("Error fetching student bookings:", error);
+      res.status(500).json({ error: "Failed to fetch bookings" });
+    }
+  }
+
+  /**
+   * GET /api/bookings/:id
+   * Get a single booking by ID
+   */
+  async getBookingById(req: AuthRequest, res: Response) {
+    try {
+      const { id } = req.params;
+      const userId = req.user?.id;
+
+      if (!userId) {
+        res.status(401).json({ error: "Unauthorized" });
+        return;
+      }
+
+      const booking = await bookingService.getBookingById(id);
+
+      if (!booking) {
+        res.status(404).json({ error: "Booking not found" });
+        return;
+      }
+
+      // Check if user has access to this booking
+      if (booking.student_id !== userId && booking.teacher_id !== userId) {
+        res.status(403).json({ error: "Access denied" });
+        return;
+      }
+
+      res.json({
+        success: true,
+        data: booking,
+      });
+    } catch (error: any) {
+      console.error("Error fetching booking:", error);
+      res.status(500).json({ error: "Failed to fetch booking" });
+    }
+  }
+
+  /**
+   * PATCH /api/bookings/:id/accept
+   * Teacher accepts a demo request
+   */
+  async acceptBooking(req: AuthRequest, res: Response) {
+    try {
+      const { id } = req.params;
+      const teacherId = req.user?.id;
+
+      if (!teacherId) {
+        res.status(401).json({ error: "Unauthorized" });
+        return;
+      }
+
+      const booking = await bookingService.acceptBooking(id, teacherId);
+
+      res.json({
+        success: true,
+        message: "Booking accepted successfully",
+        data: booking,
+      });
+    } catch (error: any) {
+      console.error("Error accepting booking:", error);
+      res.status(400).json({ error: error.message || "Failed to accept booking" });
+    }
+  }
+
+  /**
+   * PATCH /api/bookings/:id/reschedule
+   * Teacher proposes a new time
+   */
+  async rescheduleBooking(req: AuthRequest, res: Response) {
+    try {
+      const { id } = req.params;
+      const teacherId = req.user?.id;
+      const { newScheduledAt } = req.body;
+
+      if (!teacherId) {
+        res.status(401).json({ error: "Unauthorized" });
+        return;
+      }
+
+      if (!newScheduledAt) {
+        res.status(400).json({ error: "newScheduledAt is required" });
+        return;
+      }
+
+      const booking = await bookingService.rescheduleBooking(
+        id,
+        teacherId,
+        new Date(newScheduledAt)
+      );
+
+      res.json({
+        success: true,
+        message: "Reschedule proposal sent to student",
+        data: booking,
+      });
+    } catch (error: any) {
+      console.error("Error rescheduling booking:", error);
+      res.status(400).json({ error: error.message || "Failed to reschedule booking" });
+    }
+  }
+
+  /**
+   * PATCH /api/bookings/:id/confirm-reschedule
+   * Student confirms the rescheduled time
+   */
+  async confirmReschedule(req: AuthRequest, res: Response) {
+    try {
+      const { id } = req.params;
+      const studentId = req.user?.id;
+
+      if (!studentId) {
+        res.status(401).json({ error: "Unauthorized" });
+        return;
+      }
+
+      const booking = await bookingService.confirmReschedule(id, studentId);
+
+      res.json({
+        success: true,
+        message: "Reschedule confirmed successfully",
+        data: booking,
+      });
+    } catch (error: any) {
+      console.error("Error confirming reschedule:", error);
+      res.status(400).json({ error: error.message || "Failed to confirm reschedule" });
+    }
+  }
+
+  /**
+   * PATCH /api/bookings/:id/cancel
+   * Cancel a booking (by either party)
+   */
+  async cancelBooking(req: AuthRequest, res: Response) {
+    try {
+      const { id } = req.params;
+      const userId = req.user?.id;
+
+      if (!userId) {
+        res.status(401).json({ error: "Unauthorized" });
+        return;
+      }
+
+      const booking = await bookingService.cancelBooking(id, userId);
+
+      res.json({
+        success: true,
+        message: "Booking cancelled successfully",
+        data: booking,
+      });
+    } catch (error: any) {
+      console.error("Error cancelling booking:", error);
+      res.status(400).json({ error: error.message || "Failed to cancel booking" });
+    }
+  }
+
+  /**
+   * GET /api/bookings/teacher/pending-count
+   * Get count of pending demo requests for the teacher
+   */
+  async getPendingCount(req: AuthRequest, res: Response) {
+    try {
+      const teacherId = req.user?.id;
+      if (!teacherId) {
+        res.status(401).json({ error: "Unauthorized" });
+        return;
+      }
+
+      const count = await bookingService.getPendingRequestsCount(teacherId);
+
+      res.json({
+        success: true,
+        data: { count },
+      });
+    } catch (error: any) {
+      console.error("Error fetching pending count:", error);
+      res.status(500).json({ error: "Failed to fetch pending count" });
+    }
+  }
+
+  /**
+   * GET /api/teachers/:teacherId/public-availability
+   * Get public availability for a teacher (for students to book)
+   */
+  async getPublicAvailability(req: AuthRequest, res: Response) {
+    try {
+      const { teacherId } = req.params;
+      const { startDate, endDate } = req.query;
+
+      // Default to next 40 days if not specified
+      const start = startDate ? new Date(startDate as string) : new Date();
+      const end = endDate
+        ? new Date(endDate as string)
+        : new Date(Date.now() + 40 * 24 * 60 * 60 * 1000);
+
+      const availability = await bookingService.getPublicAvailability(
+        teacherId,
+        start,
+        end
+      );
+
+      res.json({
+        success: true,
+        data: availability,
+      });
+    } catch (error: any) {
+      console.error("Error fetching public availability:", error);
+      res.status(500).json({ error: "Failed to fetch availability" });
+    }
+  }
+}
+
+export const bookingController = new BookingController();

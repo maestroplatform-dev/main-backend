@@ -207,7 +207,7 @@ export class AdminService {
       prisma.bookings.count(),
 
       // Completed bookings
-      prisma.bookings.count({ where: { status: 'completed' } }),
+      prisma.bookings.count({ where: { status: 'COMPLETED' } }),
 
       // Total revenue
       prisma.payments.aggregate({
@@ -595,7 +595,7 @@ export class AdminService {
         starting_price: minPrice,
         starting_price_inr: teacher.starting_price_inr ?? null,
       };
-      console.log('Teacher Details:', JSON.stringify(details, null, 2));
+      // console.log('Teacher Details:', JSON.stringify(details, null, 2));
       return details;
     }
   // Get all users with filters

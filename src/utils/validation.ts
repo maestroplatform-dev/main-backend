@@ -172,19 +172,19 @@ export const teacherCompleteOnboardingSchema = z.object({
             .length(3, 'Provide beginner, intermediate, and advanced pricing'),
           package_card_points: z.object({
             beginner: z.object({
-              "10": z.array(z.string().min(1)).length(4),
-              "20": z.array(z.string().min(1)).length(4),
-              "30": z.array(z.string().min(1)).length(4),
+              "10": z.array(z.string()).length(4),
+              "20": z.array(z.string()).length(4),
+              "30": z.array(z.string()).length(4),
             }),
             intermediate: z.object({
-              "10": z.array(z.string().min(1)).length(4),
-              "20": z.array(z.string().min(1)).length(4),
-              "30": z.array(z.string().min(1)).length(4),
+              "10": z.array(z.string()).length(4),
+              "20": z.array(z.string()).length(4),
+              "30": z.array(z.string()).length(4),
             }),
             advanced: z.object({
-              "10": z.array(z.string().min(1)).length(4),
-              "20": z.array(z.string().min(1)).length(4),
-              "30": z.array(z.string().min(1)).length(4),
+              "10": z.array(z.string()).length(4),
+              "20": z.array(z.string()).length(4),
+              "30": z.array(z.string()).length(4),
             }),
           }),
         }),
@@ -198,19 +198,19 @@ export const teacherCompleteOnboardingSchema = z.object({
           one_on_one_price_inr: z.number().nonnegative().optional(),
           package_card_points: z.object({
             beginner: z.object({
-              "10": z.array(z.string().min(1)).length(4),
-              "20": z.array(z.string().min(1)).length(4),
-              "30": z.array(z.string().min(1)).length(4),
+              "10": z.array(z.string()).length(4),
+              "20": z.array(z.string()).length(4),
+              "30": z.array(z.string()).length(4),
             }),
             intermediate: z.object({
-              "10": z.array(z.string().min(1)).length(4),
-              "20": z.array(z.string().min(1)).length(4),
-              "30": z.array(z.string().min(1)).length(4),
+              "10": z.array(z.string()).length(4),
+              "20": z.array(z.string()).length(4),
+              "30": z.array(z.string()).length(4),
             }),
             advanced: z.object({
-              "10": z.array(z.string().min(1)).length(4),
-              "20": z.array(z.string().min(1)).length(4),
-              "30": z.array(z.string().min(1)).length(4),
+              "10": z.array(z.string()).length(4),
+              "20": z.array(z.string()).length(4),
+              "30": z.array(z.string()).length(4),
             }),
           }),
         }),
@@ -247,3 +247,66 @@ export type RegisterInput = z.infer<typeof registerSchema>
 export type TeacherCompleteOnboardingInput = z.infer<typeof teacherCompleteOnboardingSchema>
 export type TeacherOnboardingInput = z.infer<typeof teacherOnboardingSchema>
 export type TeacherProfileUpdateInput = z.infer<typeof teacherProfileUpdateSchema>
+
+// ============================================================
+// TEACHER AVAILABILITY SCHEMAS
+// ============================================================
+
+// Schema for recurring weekly availability
+export const createAvailabilitySchema = z.object({
+  day_of_week: z.number().int().min(0).max(6), // 0 = Sunday, 6 = Saturday
+  start_time: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, 'Time must be in HH:MM format'),
+  end_time: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, 'Time must be in HH:MM format'),
+  is_recurring: z.boolean().default(true),
+}).refine((data) => {
+  const start = data.start_time.split(':').map(Number)
+  const end = data.end_time.split(':').map(Number)
+  const startMinutes = start[0] * 60 + start[1]
+  const endMinutes = end[0] * 60 + end[1]
+  return endMinutes > startMinutes
+}, { message: 'End time must be after start time' })
+
+// Schema for specific date availability or unavailability
+export const dateAvailabilitySchema = z.object({
+  specific_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be in YYYY-MM-DD format'),
+  start_time: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, 'Time must be in HH:MM format').optional(),
+  end_time: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, 'Time must be in HH:MM format').optional(),
+  is_unavailable: z.boolean().default(false),
+}).refine((data) => {
+  // If marking as unavailable, times are optional
+  if (data.is_unavailable) return true
+  // If setting availability, both times are required
+  if (!data.start_time || !data.end_time) return false
+  const start = data.start_time.split(':').map(Number)
+  const end = data.end_time.split(':').map(Number)
+  const startMinutes = start[0] * 60 + start[1]
+  const endMinutes = end[0] * 60 + end[1]
+  return endMinutes > startMinutes
+}, { message: 'End time must be after start time, or mark as unavailable' })
+
+export const updateAvailabilitySchema = z.object({
+  day_of_week: z.number().int().min(0).max(6).optional(),
+  start_time: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, 'Time must be in HH:MM format').optional(),
+  end_time: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, 'Time must be in HH:MM format').optional(),
+  is_recurring: z.boolean().optional(),
+  specific_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be in YYYY-MM-DD format').optional().nullable(),
+  is_unavailable: z.boolean().optional(),
+})
+
+export const bulkAvailabilitySchema = z.object({
+  slots: z.array(createAvailabilitySchema).min(1, 'At least one slot required'),
+})
+
+export const getAvailableSlotsSchema = z.object({
+  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be in YYYY-MM-DD format'),
+  endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be in YYYY-MM-DD format'),
+  duration: z.coerce.number().int().min(15).max(180).default(60),
+}).refine((data) => {
+  return new Date(data.endDate) >= new Date(data.startDate)
+}, { message: 'End date must be on or after start date' })
+
+export type CreateAvailabilityInput = z.infer<typeof createAvailabilitySchema>
+export type DateAvailabilityInput = z.infer<typeof dateAvailabilitySchema>
+export type UpdateAvailabilityInput = z.infer<typeof updateAvailabilitySchema>
+export type BulkAvailabilityInput = z.infer<typeof bulkAvailabilitySchema>
+export type GetAvailableSlotsInput = z.infer<typeof getAvailableSlotsSchema>

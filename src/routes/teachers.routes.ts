@@ -49,6 +49,13 @@ router.put(
   asyncHandler(TeacherController.updateProfile)
 )
 
+router.patch(
+  '/profile/me',
+  authenticateUser,
+  requireRole('teacher'),
+  asyncHandler(TeacherController.updateProfile)
+)
+
 // ============================================================
 // AVAILABILITY ROUTES (Teacher authenticated)
 // All date-based - no weekly recurring logic

@@ -25,9 +25,18 @@ declare global {
 function createPrismaClient(): PrismaClient {
   const pool = new Pool({ 
     connectionString,
+    // Supabase pooler has a max of ~15 connections in Session mode
+    // Keep pool very small to avoid exhaustion with concurrent requests
+    max: 5,
+    min: 1,
+    // Connection timeout
+    connectionTimeoutMillis: 5000,
+    // Idle connections will be closed after 5 seconds
+    idleTimeoutMillis: 5000,
     // Keep connection alive
     keepAlive: true,
-    idleTimeoutMillis: 0,
+    // Close idle connections to free up pool
+    allowExitOnIdle: false,
   })
   const adapter = new PrismaPg(pool)
 

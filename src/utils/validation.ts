@@ -234,13 +234,33 @@ export const teacherOnboardingSchema = z.object({
 })
 
 export const teacherProfileUpdateSchema = z.object({
-  bio: z.string().min(50).max(1000).optional(),
+  // Old fields (kept for backwards compatibility)
+  bio: z.string().max(2000).optional(),
   instruments: z.array(z.string()).min(1).optional(),
   genres: z.array(z.string()).min(1).optional(),
   experience_years: z.number().int().min(0).max(70).optional(),
   hourly_rate: z.number().positive().optional(),
   location: z.string().min(2).optional(),
   timezone: z.string().optional(),
+  
+  // New comprehensive profile fields
+  name: z.string().min(1).max(120).optional(),
+  phone: z.string().regex(/^\d{10}$/, 'Phone must be 10 digits').optional(),
+  date_of_birth: z.string().optional(),
+  current_city: z.string().min(1).optional(),
+  pincode: z.string().regex(/^\d{6}$/, 'Pincode must be 6 digits').optional(),
+  languages: z.array(z.string()).min(1).optional(),
+  music_experience_years: z.number().int().min(0).max(70).optional(),
+  teaching_experience_years: z.number().int().min(0).max(70).optional(),
+  performance_experience_years: z.number().int().min(0).max(70).optional(),
+  tagline: z.string().max(50, 'Tagline must not exceed 50 characters').optional(),
+  education: z.string().optional(),
+  youtube_links: z.array(z.string().url('Invalid YouTube URL')).optional(),
+  demo: z.boolean().optional(),
+  media_consent: z.boolean().optional(),
+  profile_picture: z.string().url('Invalid picture URL').optional(),
+  teaching_style: z.string().optional(),
+  professional_experience: z.string().optional(),
 })
 
 export type RegisterInput = z.infer<typeof registerSchema>

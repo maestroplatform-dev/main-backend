@@ -150,13 +150,51 @@ export class TeacherService {
       throw new AppError(404, 'Teacher not found', 'TEACHER_NOT_FOUND')
     }
 
+    // Prepare update data with all possible fields
+    const updateData: any = {}
+    
+    // Old fields (for backwards compatibility)
+    if (data.bio !== undefined) updateData.bio = data.bio
+    if (data.experience_years !== undefined) updateData.experience_years = data.experience_years
+    
+    // New profile fields
+    if (data.name !== undefined) updateData.name = data.name
+    if (data.phone !== undefined) updateData.phone = data.phone
+    if (data.date_of_birth !== undefined) updateData.date_of_birth = new Date(data.date_of_birth)
+    if (data.current_city !== undefined) updateData.current_city = data.current_city
+    if (data.pincode !== undefined) updateData.pincode = data.pincode
+    if (data.music_experience_years !== undefined) updateData.music_experience_years = data.music_experience_years
+    if (data.teaching_experience_years !== undefined) updateData.teaching_experience_years = data.teaching_experience_years
+    if (data.performance_experience_years !== undefined) updateData.performance_experience_years = data.performance_experience_years
+    if (data.tagline !== undefined) updateData.tagline = data.tagline
+    if (data.education !== undefined) updateData.education = data.education
+    if (data.youtube_links !== undefined) updateData.youtube_links = data.youtube_links
+    if (data.demo !== undefined) updateData.demo = data.demo
+    if (data.media_consent !== undefined) updateData.media_consent = data.media_consent
+    if (data.profile_picture !== undefined) updateData.profile_picture = data.profile_picture
+    if (data.teaching_style !== undefined) updateData.teaching_style = data.teaching_style
+    if (data.professional_experience !== undefined) updateData.professional_experience = data.professional_experience
+
     const updated = await prisma.teachers.update({
       where: { id: teacherId },
-      data: {
-        bio: data.bio,
-        experience_years: data.experience_years,
-      },
+      data: updateData,
     })
+
+    // Update languages if provided
+    if (data.languages && data.languages.length > 0) {
+      // Delete existing languages
+      await prisma.teacher_languages.deleteMany({
+        where: { teacher_id: teacherId },
+      })
+      
+      // Insert new languages
+      await prisma.teacher_languages.createMany({
+        data: data.languages.map(language => ({
+          teacher_id: teacherId,
+          language,
+        })),
+      })
+    }
 
     return updated
   }
@@ -260,7 +298,6 @@ export class TeacherService {
           ...inst,
           package_card_points: normalize(inst.package_card_points),
         })) || [],
-        starting_price: minPrice,
       }
     })
 

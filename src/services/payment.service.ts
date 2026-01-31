@@ -1,0 +1,746 @@
+import crypto from 'crypto';
+import { nanoid } from 'nanoid';
+import { getRazorpayInstance } from '../config/razorpay';
+import prisma from '../config/database';
+import { payment_status, purchase_status, payment_option_type } from '@prisma/client';
+
+// Types
+interface SelectedSlot {
+  day_of_week: number; // 0=Sunday, 6=Saturday
+  start_time: string; // "14:00" format
+  duration_minutes?: number;
+}
+
+interface ValidateScheduleRequest {
+  teacher_id: string;
+  selected_slots: SelectedSlot[];
+}
+
+interface ValidateScheduleResponse {
+  valid: boolean;
+  conflicts: string[];
+  first_available_dates: Array<{ day: string; time: string; date: string }>;
+}
+
+interface CreateOrderRequest {
+  student_id: string;
+  package_id: string;
+  teacher_id: string;
+  scheduled_sessions: Array<{
+    date: string;
+    start_time: string;
+    end_time: string;
+  }>;
+  instrument: string;
+  level: string;
+  mode: string;
+  payment_option: 'FLEXIBLE' | 'UPFRONT';
+}
+
+interface CreateOrderResponse {
+  purchased_package_id: string;
+  razorpay_order_id: string;
+  amount: number;
+  currency: string;
+  student_name: string;
+  student_email: string;
+  student_phone?: string;
+}
+
+interface VerifyPaymentRequest {
+  razorpay_order_id: string;
+  razorpay_payment_id: string;
+  razorpay_signature: string;
+  purchased_package_id: string;
+}
+
+interface VerifyPaymentResponse {
+  success: boolean;
+  message: string;
+  purchase: {
+    id: string;
+    status: string;
+    sessions_booked: number;
+  };
+  bookings: Array<{
+    id: string;
+    date: string;
+    start_time: string;
+    end_time: string;
+  }>;
+}
+
+export class PaymentService {
+  /**
+   * Validates that a student doesn't already have an active package with the same teacher
+   */
+  async validateNoExistingPackage(studentId: string, teacherId: string): Promise<boolean> {
+    const existingPackage = await prisma.purchased_packages.findFirst({
+      where: {
+        student_id: studentId,
+        teacher_id: teacherId,
+        status: {
+          in: ['PENDING', 'ACTIVE']
+        }
+      }
+    });
+
+    return !existingPackage;
+  }
+
+  /**
+   * Validates that selected schedule slots are available for the teacher
+   */
+  async validateSchedule(data: ValidateScheduleRequest): Promise<ValidateScheduleResponse> {
+    const { teacher_id, selected_slots } = data;
+
+    const conflicts: string[] = [];
+    const firstAvailableDates: Array<{ day: string; time: string; date: string }> = [];
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+    // Fetch teacher's availability
+    const teacherAvailability = await prisma.teacher_availability.findMany({
+      where: {
+        teacher_id,
+        is_unavailable: false
+      }
+    });
+
+    // Check each selected slot against teacher availability
+    for (const slot of selected_slots) {
+      // Find matching availability for this day
+      const availableSlot = teacherAvailability.find(
+        (avail) => avail.day_of_week === slot.day_of_week &&
+                   avail.start_time <= slot.start_time &&
+                   avail.end_time >= slot.start_time
+      );
+
+      if (!availableSlot) {
+        conflicts.push(
+          `${dayNames[slot.day_of_week]} at ${slot.start_time} - Teacher not available`
+        );
+      } else {
+        // Calculate first available date for this slot
+        const firstDate = this.getNextDateForDayOfWeek(new Date(), slot.day_of_week);
+        firstAvailableDates.push({
+          day: dayNames[slot.day_of_week],
+          time: slot.start_time,
+          date: firstDate.toISOString().split('T')[0]
+        });
+      }
+    }
+
+    return {
+      valid: conflicts.length === 0,
+      conflicts,
+      first_available_dates: firstAvailableDates
+    };
+  }
+
+  /**
+   * Creates a Razorpay order and initializes the purchased package
+   */
+  async createOrder(data: CreateOrderRequest): Promise<CreateOrderResponse> {
+    const { student_id, package_id, teacher_id, scheduled_sessions, instrument, level, mode, payment_option } = data;
+    const sessions_to_pay = scheduled_sessions.length;
+
+    // Validate no existing package
+    const canPurchase = await this.validateNoExistingPackage(student_id, teacher_id);
+    if (!canPurchase) {
+      throw new Error('You already have an active package with this teacher');
+    }
+
+    // Fetch package details
+    const classPackage = await prisma.class_packages.findUnique({
+      where: { id: package_id },
+      include: { teachers: true }
+    });
+
+    if (!classPackage) {
+      throw new Error('Package not found');
+    }
+
+    if (classPackage.teacher_id !== teacher_id) {
+      throw new Error('Package does not belong to the specified teacher');
+    }
+
+    // Fetch student details
+    const student = await prisma.students.findUnique({
+      where: { id: student_id },
+      include: { profiles: true }
+    });
+
+    if (!student) {
+      throw new Error('Student not found');
+    }
+
+    // Calculate pricing
+    const totalPackagePrice = Number(classPackage.price);
+    const classesCount = classPackage.classes_count;
+    const pricePerSession = totalPackagePrice / classesCount;
+    const amountToPay = pricePerSession * sessions_to_pay;
+    const amountInPaisa = Math.round(amountToPay * 100); // Razorpay expects amount in paisa
+
+    // Calculate expiry date (validity_days from package)
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + classPackage.validity_days);
+
+    // Create purchased package in PENDING status
+    const purchasedPackage = await prisma.purchased_packages.create({
+      data: {
+        student_id,
+        package_id,
+        teacher_id,
+        instrument,
+        level,
+        mode,
+        classes_total: classesCount,
+        classes_remaining: classesCount,
+        classes_completed: 0,
+        total_package_price: totalPackagePrice,
+        price_per_session: pricePerSession,
+        payment_option: payment_option as payment_option_type,
+        sessions_paid: 0,
+        amount_paid: 0,
+        amount_remaining: totalPackagePrice,
+        expires_at: expiresAt,
+        status: 'PENDING'
+      }
+    });
+
+    // Create Razorpay order
+    const razorpayOrder = await getRazorpayInstance().orders.create({
+      amount: amountInPaisa,
+      currency: 'INR',
+      receipt: `pkg_${purchasedPackage.id.substring(0, 8)}`,
+      notes: {
+        purchased_package_id: purchasedPackage.id,
+        student_id,
+        teacher_id,
+        sessions_covered: sessions_to_pay.toString(),
+        payment_option
+      }
+    });
+
+    // Create payment record with scheduled sessions data
+    await prisma.purchase_payments.create({
+      data: {
+        purchased_package_id: purchasedPackage.id,
+        razorpay_order_id: razorpayOrder.id,
+        amount: amountToPay,
+        currency: 'INR',
+        sessions_covered: sessions_to_pay,
+        status: 'PENDING',
+        metadata: {
+          scheduled_sessions: scheduled_sessions
+        }
+      }
+    });
+
+    // Get student details for checkout
+    const studentName = student.name || student.profiles?.name || 'Student';
+    const studentEmail = student.profiles ? 
+      (await prisma.users.findUnique({ where: { id: student_id } }))?.email || '' : '';
+
+    return {
+      purchased_package_id: purchasedPackage.id,
+      razorpay_order_id: razorpayOrder.id,
+      amount: amountToPay,
+      currency: 'INR',
+      student_name: studentName,
+      student_email: studentEmail,
+      student_phone: student.guardian_phone || undefined
+    };
+  }
+
+  /**
+   * Verifies Razorpay payment signature and activates the package
+   */
+  async verifyPayment(data: VerifyPaymentRequest): Promise<VerifyPaymentResponse> {
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, purchased_package_id } = data;
+
+    // Step 1: Verify signature
+    const isValidSignature = this.verifySignature(razorpay_order_id, razorpay_payment_id, razorpay_signature);
+    if (!isValidSignature) {
+      // Update payment status to failed
+      await prisma.purchase_payments.updateMany({
+        where: { razorpay_order_id },
+        data: { status: 'FAILED' }
+      });
+      throw new Error('Payment verification failed - invalid signature');
+    }
+
+    // Step 2: Fetch payment record
+    const paymentRecord = await prisma.purchase_payments.findFirst({
+      where: { razorpay_order_id },
+      include: { purchased_packages: true }
+    });
+
+    if (!paymentRecord) {
+      throw new Error('Payment record not found');
+    }
+
+    if (paymentRecord.purchased_package_id !== purchased_package_id) {
+      throw new Error('Package mismatch');
+    }
+
+    if (paymentRecord.status === 'SUCCESS') {
+      return {
+        success: true,
+        message: 'Payment already processed',
+        purchase: {
+          id: purchased_package_id,
+          status: 'ACTIVE',
+          sessions_booked: paymentRecord.sessions_covered
+        },
+        bookings: []
+      };
+    }
+
+    // Step 3: Fetch payment details from Razorpay to verify amount
+    const razorpayPayment = await getRazorpayInstance().payments.fetch(razorpay_payment_id);
+    const paidAmount = Number(razorpayPayment.amount) / 100; // Convert from paisa
+
+    if (paidAmount !== Number(paymentRecord.amount)) {
+      await prisma.purchase_payments.update({
+        where: { id: paymentRecord.id },
+        data: { status: 'FAILED', metadata: { error: 'Amount mismatch', expected: paymentRecord.amount, received: paidAmount } }
+      });
+      throw new Error('Payment amount mismatch');
+    }
+
+    // Step 4: Update payment record
+    // Preserve the scheduled_sessions from original metadata
+    const scheduledSessions = (paymentRecord.metadata as any)?.scheduled_sessions || [];
+    
+    await prisma.purchase_payments.update({
+      where: { id: paymentRecord.id },
+      data: {
+        razorpay_payment_id,
+        razorpay_signature,
+        status: 'SUCCESS',
+        payment_method: razorpayPayment.method,
+        completed_at: new Date(),
+        metadata: {
+          scheduled_sessions: scheduledSessions,
+          razorpay_response: JSON.parse(JSON.stringify(razorpayPayment))
+        }
+      }
+    });
+
+    // Step 5: Update purchased package
+    const purchasedPackage = paymentRecord.purchased_packages;
+    const newAmountPaid = Number(purchasedPackage.amount_paid) + paidAmount;
+    const newSessionsPaid = purchasedPackage.sessions_paid + paymentRecord.sessions_covered;
+
+    await prisma.purchased_packages.update({
+      where: { id: purchased_package_id },
+      data: {
+        status: 'ACTIVE',
+        amount_paid: newAmountPaid,
+        amount_remaining: Number(purchasedPackage.total_package_price) - newAmountPaid,
+        sessions_paid: newSessionsPaid
+      }
+    });
+
+    // Step 6: Create bookings from stored scheduled sessions
+    const bookingsCreated = await this.createBookingsFromScheduledSessions(
+      purchasedPackage.student_id,
+      purchasedPackage.teacher_id,
+      purchased_package_id,
+      scheduledSessions
+    );
+
+    // Step 7: Fetch created bookings to return to frontend
+    const createdBookings = await prisma.bookings.findMany({
+      where: { purchased_package_id },
+      select: {
+        id: true,
+        scheduled_at: true,
+        duration_minutes: true
+      },
+      orderBy: { scheduled_at: 'asc' }
+    });
+
+    return {
+      success: true,
+      message: 'Payment verified successfully',
+      purchase: {
+        id: purchased_package_id,
+        status: 'ACTIVE',
+        sessions_booked: bookingsCreated
+      },
+      bookings: createdBookings.map(b => {
+        const startTime = b.scheduled_at.toISOString().split('T')[1].substring(0, 5);
+        const endDate = new Date(new Date(b.scheduled_at).getTime() + (b.duration_minutes || 60) * 60000);
+        const endTime = endDate.toISOString().split('T')[1].substring(0, 5);
+        return {
+          id: b.id,
+          date: b.scheduled_at.toISOString().split('T')[0],
+          start_time: startTime,
+          end_time: endTime
+        };
+      })
+    };
+  }
+
+  /**
+   * Verifies Razorpay signature using HMAC SHA256
+   */
+  private verifySignature(orderId: string, paymentId: string, signature: string): boolean {
+    const secret = process.env.RAZORPAY_KEY_SECRET;
+    if (!secret) {
+      console.error('Razorpay secret not configured');
+      return false;
+    }
+
+    const payload = `${orderId}|${paymentId}`;
+    const expectedSignature = crypto
+      .createHmac('sha256', secret)
+      .update(payload)
+      .digest('hex');
+
+    return expectedSignature === signature;
+  }
+
+  /**
+   * Creates bookings from stored scheduled sessions (specific dates/times from cart)
+   */
+  private async createBookingsFromScheduledSessions(
+    studentId: string,
+    teacherId: string,
+    purchasedPackageId: string,
+    scheduledSessions: Array<{ date: string; start_time: string; end_time: string }>
+  ): Promise<number> {
+    let bookingsCreated = 0;
+
+    for (const session of scheduledSessions) {
+      try {
+        // Generate a unique meeting link for each session
+        const meetingId = nanoid(12);
+        const meetingLink = `https://meet.jit.si/Maestera-Session-${meetingId}`;
+
+        // Calculate duration in minutes
+        const [startHour, startMin] = session.start_time.split(':').map(Number);
+        const [endHour, endMin] = session.end_time.split(':').map(Number);
+        const duration_minutes = (endHour * 60 + endMin) - (startHour * 60 + startMin);
+
+        // Create booking with scheduled datetime
+        const scheduledAt = new Date(`${session.date}T${session.start_time}:00`);
+
+        await prisma.bookings.create({
+          data: {
+            student_id: studentId,
+            teacher_id: teacherId,
+            purchased_package_id: purchasedPackageId,
+            booking_type: 'PACKAGE',
+            scheduled_at: scheduledAt,
+            duration_minutes,
+            meeting_link: meetingLink,
+            is_demo: false,
+            status: 'SCHEDULED'
+          }
+        });
+
+        bookingsCreated++;
+      } catch (err) {
+        console.error('❌ Error creating booking for session:', session, err);
+      }
+    }
+
+    return bookingsCreated;
+  }
+
+  /**
+   * Creates bookings for the specified number of sessions based on scheduled slots
+   */
+  private async createBookingsForSessions(
+    purchasedPackageId: string,
+    sessionsToCreate: number
+  ): Promise<number> {
+    // Fetch package and scheduled sessions
+    const purchasedPackage = await prisma.purchased_packages.findUnique({
+      where: { id: purchasedPackageId },
+      include: {
+        scheduled_sessions: {
+          where: { is_active: true },
+          orderBy: { day_of_week: 'asc' }
+        }
+      }
+    });
+
+    if (!purchasedPackage || purchasedPackage.scheduled_sessions.length === 0) {
+      console.error('No scheduled sessions found for package');
+      return 0;
+    }
+
+    const slots = purchasedPackage.scheduled_sessions;
+    let bookingsCreated = 0;
+    let slotIndex = 0;
+
+    // Find the first session date
+    let currentDate = this.getNextDateForDayOfWeek(new Date(), slots[0].day_of_week);
+
+    // Update first_session_date if not set
+    if (!purchasedPackage.first_session_date) {
+      await prisma.purchased_packages.update({
+        where: { id: purchasedPackageId },
+        data: { first_session_date: currentDate }
+      });
+    }
+
+    while (bookingsCreated < sessionsToCreate) {
+      const slot = slots[slotIndex % slots.length];
+
+      // Get next occurrence of this slot's day
+      const bookingDate = this.getNextDateForDayOfWeek(currentDate, slot.day_of_week);
+      
+      // Parse time and create full datetime
+      const [hours, minutes] = slot.start_time.split(':').map(Number);
+      const scheduledAt = new Date(bookingDate);
+      scheduledAt.setHours(hours, minutes, 0, 0);
+
+      // Create the booking
+      await prisma.bookings.create({
+        data: {
+          student_id: purchasedPackage.student_id,
+          teacher_id: purchasedPackage.teacher_id,
+          purchased_package_id: purchasedPackageId,
+          booking_type: 'package_session',
+          status: 'SCHEDULED',
+          scheduled_at: scheduledAt,
+          duration_minutes: slot.duration_minutes,
+          is_demo: false
+        }
+      });
+
+      bookingsCreated++;
+      slotIndex++;
+
+      // Move to next week when we've gone through all slots
+      if (slotIndex % slots.length === 0) {
+        currentDate = new Date(bookingDate);
+        currentDate.setDate(currentDate.getDate() + 7);
+      } else {
+        // Move currentDate forward to at least the booking date
+        currentDate = new Date(bookingDate);
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+    }
+
+    // Update classes_remaining
+    await prisma.purchased_packages.update({
+      where: { id: purchasedPackageId },
+      data: {
+        classes_remaining: purchasedPackage.classes_remaining - bookingsCreated
+      }
+    });
+
+    return bookingsCreated;
+  }
+
+  /**
+   * Gets the next date that falls on the specified day of week
+   */
+  private getNextDateForDayOfWeek(fromDate: Date, targetDayOfWeek: number): Date {
+    const result = new Date(fromDate);
+    result.setHours(0, 0, 0, 0);
+    
+    const currentDay = result.getDay();
+    let daysToAdd = targetDayOfWeek - currentDay;
+    
+    if (daysToAdd < 0) {
+      daysToAdd += 7;
+    }
+    
+    result.setDate(result.getDate() + daysToAdd);
+    return result;
+  }
+
+  /**
+   * Creates an order for the next tranche of flexible payments
+   */
+  async createNextTranchePayment(purchasedPackageId: string): Promise<CreateOrderResponse> {
+    const purchasedPackage = await prisma.purchased_packages.findUnique({
+      where: { id: purchasedPackageId },
+      include: {
+        students: { include: { profiles: true } },
+        class_packages: true
+      }
+    });
+
+    if (!purchasedPackage) {
+      throw new Error('Package not found');
+    }
+
+    if (purchasedPackage.status !== 'ACTIVE') {
+      throw new Error('Package is not active');
+    }
+
+    if (purchasedPackage.payment_option !== 'FLEXIBLE') {
+      throw new Error('This package uses upfront payment');
+    }
+
+    // Calculate remaining sessions to pay
+    const remainingSessions = purchasedPackage.classes_total - purchasedPackage.sessions_paid;
+    if (remainingSessions <= 0) {
+      throw new Error('All sessions already paid');
+    }
+
+    // Determine sessions for this tranche (4 or remaining if less)
+    const sessionsForTranche = Math.min(4, remainingSessions);
+    const amountToPay = Number(purchasedPackage.price_per_session) * sessionsForTranche;
+    const amountInPaisa = Math.round(amountToPay * 100);
+
+    // Create Razorpay order
+    const razorpayOrder = await getRazorpayInstance().orders.create({
+      amount: amountInPaisa,
+      currency: 'INR',
+      receipt: `tranche_${purchasedPackage.id.substring(0, 8)}`,
+      notes: {
+        purchased_package_id: purchasedPackage.id,
+        student_id: purchasedPackage.student_id,
+        teacher_id: purchasedPackage.teacher_id,
+        sessions_covered: sessionsForTranche.toString(),
+        payment_type: 'tranche'
+      }
+    });
+
+    // Create payment record
+    await prisma.purchase_payments.create({
+      data: {
+        purchased_package_id: purchasedPackage.id,
+        razorpay_order_id: razorpayOrder.id,
+        amount: amountToPay,
+        currency: 'INR',
+        sessions_covered: sessionsForTranche,
+        status: 'PENDING'
+      }
+    });
+
+    // Get student details
+    const student = purchasedPackage.students;
+    const studentName = student?.name || student?.profiles?.name || 'Student';
+    const studentEmail = student?.profiles ?
+      (await prisma.users.findUnique({ where: { id: purchasedPackage.student_id } }))?.email || '' : '';
+
+    return {
+      purchased_package_id: purchasedPackage.id,
+      razorpay_order_id: razorpayOrder.id,
+      amount: amountToPay,
+      currency: 'INR',
+      student_name: studentName,
+      student_email: studentEmail,
+      student_phone: student?.guardian_phone || undefined
+    };
+  }
+
+  /**
+   * Gets package details with payment history
+   */
+  async getPackageDetails(purchasedPackageId: string) {
+    return prisma.purchased_packages.findUnique({
+      where: { id: purchasedPackageId },
+      include: {
+        class_packages: true,
+        teachers: {
+          select: {
+            id: true,
+            name: true,
+            profile_picture: true
+          }
+        },
+        purchase_payments: {
+          orderBy: { created_at: 'desc' }
+        },
+        scheduled_sessions: true,
+        bookings: {
+          where: {
+            status: { in: ['SCHEDULED', 'COMPLETED'] }
+          },
+          orderBy: { scheduled_at: 'asc' }
+        }
+      }
+    });
+  }
+
+  /**
+   * Gets all packages for a student
+   */
+  async getStudentPackages(studentId: string) {
+    return prisma.purchased_packages.findMany({
+      where: { student_id: studentId },
+      include: {
+        class_packages: true,
+        teachers: {
+          select: {
+            id: true,
+            name: true,
+            profile_picture: true
+          }
+        },
+        purchase_payments: {
+          where: { status: 'SUCCESS' },
+          orderBy: { created_at: 'desc' }
+        },
+        scheduled_sessions: {
+          where: { is_active: true },
+          orderBy: { day_of_week: 'asc' }
+        },
+        bookings: {
+          where: {
+            status: { in: ['SCHEDULED', 'COMPLETED'] }
+          },
+          orderBy: { scheduled_at: 'asc' },
+          take: 10
+        }
+      },
+      orderBy: { purchased_at: 'desc' }
+    });
+  }
+
+  /**
+   * Cancels a package and processes refund if applicable
+   */
+  async cancelPackage(purchasedPackageId: string, studentId: string) {
+    const purchasedPackage = await prisma.purchased_packages.findUnique({
+      where: { id: purchasedPackageId }
+    });
+
+    if (!purchasedPackage) {
+      throw new Error('Package not found');
+    }
+
+    if (purchasedPackage.student_id !== studentId) {
+      throw new Error('Unauthorized');
+    }
+
+    if (purchasedPackage.status === 'CANCELLED') {
+      throw new Error('Package already cancelled');
+    }
+
+    // Cancel all pending bookings
+    await prisma.bookings.updateMany({
+      where: {
+        purchased_package_id: purchasedPackageId,
+        status: 'SCHEDULED'
+      },
+      data: {
+        status: 'CANCELLED'
+      }
+    });
+
+    // Update package status
+    await prisma.purchased_packages.update({
+      where: { id: purchasedPackageId },
+      data: { status: 'CANCELLED' }
+    });
+
+    // TODO: Implement refund logic via Razorpay if needed
+    // This would involve calling razorpay.payments.refund()
+
+    return { success: true, message: 'Package cancelled successfully' };
+  }
+}
+
+export const paymentService = new PaymentService();

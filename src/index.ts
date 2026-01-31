@@ -61,7 +61,7 @@ app.use(notFoundHandler)
 app.use(errorHandler)
 
 // Start server
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log('\n' + '='.repeat(60))
   console.log('🎵  MAESTRA BACKEND API')
   console.log('='.repeat(60))
@@ -76,6 +76,15 @@ app.listen(PORT, () => {
   console.log('='.repeat(60) + '\n')
 })
 
+// Keep server reference to prevent garbage collection
+server.on('error', (error: NodeJS.ErrnoException) => {
+  if (error.code === 'EADDRINUSE') {
+    console.error(`\n❌ Port ${PORT} is already in use`)
+    process.exit(1)
+  }
+  throw error
+})
+
 // Graceful shutdown
 process.on('SIGTERM', () => {
   console.log('\n👋 SIGTERM received, shutting down gracefully...')
@@ -85,6 +94,17 @@ process.on('SIGTERM', () => {
 process.on('SIGINT', () => {
   console.log('\n👋 SIGINT received, shutting down gracefully...')
   process.exit(0)
+})
+
+// Catch unhandled errors
+process.on('uncaughtException', (error) => {
+  console.error('\n❌ Uncaught Exception:', error)
+  process.exit(1)
+})
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('\n❌ Unhandled Rejection at:', promise, 'reason:', reason)
+  process.exit(1)
 })
 
 export default app

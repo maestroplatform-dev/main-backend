@@ -113,3 +113,11 @@ CREATE INDEX IF NOT EXISTS idx_bookings_student ON public.bookings(student_id);
 CREATE INDEX IF NOT EXISTS idx_bookings_teacher ON public.bookings(teacher_id);
 CREATE INDEX IF NOT EXISTS idx_bookings_scheduled ON public.bookings(scheduled_at);
 CREATE INDEX IF NOT EXISTS idx_reviews_teacher ON public.reviews(teacher_id);
+
+-- Add specific_date and is_unavailable to teacher_availability table
+ALTER TABLE public.teacher_availability 
+ADD COLUMN IF NOT EXISTS specific_date DATE,
+ADD COLUMN IF NOT EXISTS is_unavailable BOOLEAN DEFAULT FALSE;
+
+-- Add index for efficient date-based queries
+CREATE INDEX IF NOT EXISTS idx_teacher_availability_date ON public.teacher_availability(teacher_id, specific_date);

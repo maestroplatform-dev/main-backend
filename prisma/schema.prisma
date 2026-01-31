@@ -412,26 +412,30 @@ model users {
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model bookings {
-  id                   String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  student_id           String              @db.Uuid
-  teacher_id           String              @db.Uuid
-  package_id           String?             @db.Uuid
-  purchased_package_id String?             @db.Uuid
-  booking_type         String
-  status               String?             @default("pending")
-  scheduled_at         DateTime            @db.Timestamptz(6)
-  duration_minutes     Int?                @default(60)
-  meeting_link         String?
-  notes                String?
-  created_at           DateTime?           @default(now()) @db.Timestamptz(6)
-  updated_at           DateTime?           @default(now()) @db.Timestamptz(6)
-  purchased_packages   purchased_packages? @relation(fields: [purchased_package_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  students             students            @relation(fields: [student_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  teachers             teachers            @relation(fields: [teacher_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  id                       String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  student_id               String              @db.Uuid
+  teacher_id               String              @db.Uuid
+  package_id               String?             @db.Uuid
+  purchased_package_id     String?             @db.Uuid
+  booking_type             String
+  status                   booking_status      @default(PENDING_APPROVAL)
+  scheduled_at             DateTime            @db.Timestamptz(6)
+  duration_minutes         Int?                @default(30)
+  meeting_link             String?
+  notes                    String?
+  is_demo                  Boolean             @default(true)
+  rescheduled_at           DateTime?           @db.Timestamptz(6)
+  rescheduled_by           String?             @db.Uuid
+  created_at               DateTime?           @default(now()) @db.Timestamptz(6)
+  updated_at               DateTime?           @default(now()) @db.Timestamptz(6)
+  purchased_packages       purchased_packages? @relation(fields: [purchased_package_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  students                 students            @relation(fields: [student_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  teachers                 teachers            @relation(fields: [teacher_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@index([scheduled_at], map: "idx_bookings_scheduled")
   @@index([student_id], map: "idx_bookings_student")
   @@index([teacher_id], map: "idx_bookings_teacher")
+  @@index([status], map: "idx_bookings_status")
   @@schema("public")
 }
 
@@ -486,20 +490,101 @@ model profiles {
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model purchased_packages {
-  id                String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  student_id        String         @db.Uuid
-  package_id        String         @db.Uuid
-  payment_id        String?        @db.Uuid
-  classes_total     Int
-  classes_remaining Int
-  purchased_at      DateTime?      @default(now()) @db.Timestamptz(6)
-  expires_at        DateTime       @db.Timestamptz(6)
-  status            String?        @default("active")
-  bookings          bookings[]
-  class_packages    class_packages @relation(fields: [package_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  students          students       @relation(fields: [student_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  id                    String                       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  student_id            String                       @db.Uuid
+  package_id            String                       @db.Uuid
+  teacher_id            String                       @db.Uuid
+
+  // Package details (stored for easy access)
+  instrument            String?
+  level                 String?
+  mode                  String?
+
+  // Session tracking
+  classes_total         Int
+  classes_remaining     Int
+  classes_completed     Int                          @default(0)
+
+  // Pricing details
+  total_package_price   Decimal                      @db.Decimal(10, 2)
+  price_per_session     Decimal                      @db.Decimal(10, 2)
+
+  // Payment status (flexible vs full)
+  payment_option        payment_option_type          @default(FLEXIBLE)
+  sessions_paid         Int                          @default(0)
+  amount_paid           Decimal                      @default(0) @db.Decimal(10, 2)
+  amount_remaining      Decimal                      @default(0) @db.Decimal(10, 2)
+
+  // Timing
+  purchased_at          DateTime?                    @default(now()) @db.Timestamptz(6)
+  expires_at            DateTime                     @db.Timestamptz(6)
+  first_session_date    DateTime?                    @db.Date
+
+  // Status
+  status                purchase_status              @default(PENDING)
+
+  // Relations
+  bookings              bookings[]
+  class_packages        class_packages               @relation(fields: [package_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  students              students                     @relation(fields: [student_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  teachers              teachers                     @relation(fields: [teacher_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  purchase_payments     purchase_payments[]
+  scheduled_sessions    package_scheduled_sessions[]
 
   @@index([student_id], map: "idx_purchased_packages_student")
+  @@index([teacher_id], map: "idx_purchased_packages_teacher")
+  @@index([status], map: "idx_purchased_packages_status")
+  @@schema("public")
+}
+
+/// Tracks all payments for a package (initial + subsequent flexible payments)
+model purchase_payments {
+  id                    String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  purchased_package_id  String             @db.Uuid
+  razorpay_order_id     String?            @unique
+  razorpay_payment_id   String?            @unique
+  razorpay_signature    String?
+
+  amount                Decimal            @db.Decimal(10, 2)
+  currency              String             @default("INR")
+  sessions_covered      Int                // How many sessions this payment covers
+
+  status                payment_status     @default(PENDING)
+  payment_method        String?            // card, upi, netbanking, wallet, etc
+
+  // Payment attempt tracking
+  created_at            DateTime           @default(now()) @db.Timestamptz(6)
+  completed_at          DateTime?          @db.Timestamptz(6)
+
+  metadata              Json?              // Store Razorpay response, error details, etc
+
+  purchased_packages    purchased_packages @relation(fields: [purchased_package_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([purchased_package_id], map: "idx_purchase_payments_package")
+  @@index([razorpay_payment_id], map: "idx_purchase_payments_razorpay")
+  @@index([status], map: "idx_purchase_payments_status")
+  @@schema("public")
+}
+
+/// Stores the student's selected weekly schedule slots for a package
+model package_scheduled_sessions {
+  id                    String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  purchased_package_id  String             @db.Uuid
+  teacher_id            String             @db.Uuid
+
+  // Weekly recurring schedule
+  day_of_week           Int                // 0=Sunday, 6=Saturday
+  start_time            String             // "14:00" in HH:mm format
+  duration_minutes      Int                @default(30)
+  meeting_link          String?            // Jitsi or other meeting link
+
+  is_active             Boolean            @default(true)
+  created_at            DateTime           @default(now()) @db.Timestamptz(6)
+
+  purchased_packages    purchased_packages @relation(fields: [purchased_package_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  teachers              teachers           @relation(fields: [teacher_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([purchased_package_id], map: "idx_scheduled_sessions_package")
   @@schema("public")
 }
 
@@ -570,14 +655,17 @@ model student_package_card_overrides {
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model teacher_availability {
-  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  teacher_id   String   @db.Uuid
-  day_of_week  Int
-  start_time   String
-  end_time     String
-  is_recurring Boolean? @default(true)
-  teachers     teachers @relation(fields: [teacher_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  teacher_id     String    @db.Uuid
+  day_of_week    Int
+  start_time     String
+  end_time       String
+  is_recurring   Boolean?  @default(true)
+  specific_date  DateTime? @db.Date
+  is_unavailable Boolean?  @default(false)
+  teachers       teachers  @relation(fields: [teacher_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
+  @@index([teacher_id, specific_date])
   @@schema("public")
 }
 
@@ -609,16 +697,18 @@ model teachers {
   teaching_style               String?
   education                    String?
   professional_experience      String?
-  youtube_links                String[]               @default([])
+  youtube_links                String[]                     @default([])
   bookings                     bookings[]
   class_packages               class_packages[]
+  purchased_packages           purchased_packages[]
+  package_scheduled_sessions   package_scheduled_sessions[]
   reviews                      reviews[]
   teacher_availability         teacher_availability[]
   teacher_engagements          teacher_engagements?
   teacher_formats              teacher_formats?
   teacher_instruments          teacher_instruments[]
   teacher_languages            teacher_languages[]
-  profiles                     profiles               @relation(fields: [id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  profiles                     profiles                     @relation(fields: [id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@index([onboarding_completed])
   @@schema("public")
@@ -753,6 +843,44 @@ enum instrument_level {
 enum class_mode {
   online
   offline
+
+  @@schema("public")
+}
+
+enum booking_status {
+  PENDING_APPROVAL
+  SCHEDULED
+  RESCHEDULE_PROPOSED
+  COMPLETED
+  CANCELLED
+
+  @@schema("public")
+}
+
+enum payment_option_type {
+  FLEXIBLE
+  UPFRONT
+
+  @@schema("public")
+}
+
+enum purchase_status {
+  PENDING
+  ACTIVE
+  PAUSED
+  EXPIRED
+  COMPLETED
+  CANCELLED
+  FAILED
+
+  @@schema("public")
+}
+
+enum payment_status {
+  PENDING
+  SUCCESS
+  FAILED
+  REFUNDED
 
   @@schema("public")
 }

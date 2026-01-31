@@ -170,6 +170,55 @@ export class TeacherOnboardingService {
           }
         }
 
+        // Auto-create default packages if not already present
+        const existingPackages = await (tx as any).class_packages.findMany({
+          where: { teacher_id: teacherId }
+        })
+
+        if (existingPackages.length === 0) {
+          // Get beginner tier price from first teaching instrument
+          const firstTeachingInstrument = data.instruments.find(i => i.teach_or_perform === 'Teach')
+          if (firstTeachingInstrument && firstTeachingInstrument.tiers && firstTeachingInstrument.tiers.length > 0) {
+            const beginnerTier = firstTeachingInstrument.tiers.find(t => t.level === 'beginner')
+            if (beginnerTier && beginnerTier.price_inr) {
+              const basePrice = beginnerTier.price_inr
+
+              // Create 3 standard packages
+              const packagesToCreate = [
+                {
+                  teacher_id: teacherId,
+                  name: '10 Sessions Package',
+                  description: 'Perfect for beginners to get started',
+                  classes_count: 10,
+                  validity_days: 90,
+                  price: basePrice * 10,
+                  is_active: true
+                },
+                {
+                  teacher_id: teacherId,
+                  name: '20 Sessions Package',
+                  description: 'Most popular choice for consistent learning',
+                  classes_count: 20,
+                  validity_days: 120,
+                  price: basePrice * 20,
+                  is_active: true
+                },
+                {
+                  teacher_id: teacherId,
+                  name: '30 Sessions Package',
+                  description: 'Best value for committed learners',
+                  classes_count: 30,
+                  validity_days: 180,
+                  price: basePrice * 30,
+                  is_active: true
+                }
+              ]
+
+              await (tx as any).class_packages.createMany({ data: packagesToCreate })
+            }
+          }
+        }
+
         return teacherRow
       })
 

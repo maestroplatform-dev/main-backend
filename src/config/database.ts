@@ -23,7 +23,12 @@ declare global {
  * production environments (Render / Supabase / Neon).
  */
 function createPrismaClient(): PrismaClient {
-  const pool = new Pool({ connectionString })
+  const pool = new Pool({ 
+    connectionString,
+    // Keep connection alive
+    keepAlive: true,
+    idleTimeoutMillis: 0,
+  })
   const adapter = new PrismaPg(pool)
 
   return new PrismaClient({

@@ -1,6 +1,8 @@
 import { Router } from 'express'
 import { TeacherController } from '../controllers/teacher.controller'
 import { TeacherOnboardingController } from '../controllers/teacher-onboarding.controller'
+import { TeacherAvailabilityController } from '../controllers/teacher-availability.controller'
+import { bookingController } from '../controllers/booking.controller'
 import { authenticateUser, requireRole } from '../middleware/auth'
 import { asyncHandler } from '../utils/asyncHandler'
 
@@ -47,7 +49,121 @@ router.put(
   asyncHandler(TeacherController.updateProfile)
 )
 
-// Public routes (must come LAST - after all protected routes)
+// ============================================================
+// AVAILABILITY ROUTES (Teacher authenticated)
+// All date-based - no weekly recurring logic
+// ============================================================
+
+// Add a single slot for a specific date
+router.post(
+  '/availability/slot',
+  authenticateUser,
+  requireRole('teacher'),
+  asyncHandler(TeacherAvailabilityController.addSlot)
+)
+
+// Add multiple slots at once
+router.post(
+  '/availability/slots',
+  authenticateUser,
+  requireRole('teacher'),
+  asyncHandler(TeacherAvailabilityController.addBulkSlots)
+)
+
+// Replace all slots for a specific date
+router.put(
+  '/availability/date',
+  authenticateUser,
+  requireRole('teacher'),
+  asyncHandler(TeacherAvailabilityController.replaceSlotsForDate)
+)
+
+// Get own slots (with optional date range query params)
+router.get(
+  '/availability/me',
+  authenticateUser,
+  requireRole('teacher'),
+  asyncHandler(TeacherAvailabilityController.getMySlots)
+)
+
+// Unavailable dates management (must come BEFORE /:id routes)
+router.post(
+  '/availability/unavailable',
+  authenticateUser,
+  requireRole('teacher'),
+  asyncHandler(TeacherAvailabilityController.markUnavailable)
+)
+
+router.get(
+  '/availability/unavailable',
+  authenticateUser,
+  requireRole('teacher'),
+  asyncHandler(TeacherAvailabilityController.getUnavailableDates)
+)
+
+router.delete(
+  '/availability/unavailable/:date',
+  authenticateUser,
+  requireRole('teacher'),
+  asyncHandler(TeacherAvailabilityController.removeUnavailable)
+)
+
+// Delete all slots for a specific date
+router.delete(
+  '/availability/date/:date',
+  authenticateUser,
+  requireRole('teacher'),
+  asyncHandler(TeacherAvailabilityController.deleteSlotsForDate)
+)
+
+// Calendar view (availability + bookings)
+router.get(
+  '/calendar',
+  authenticateUser,
+  requireRole('teacher'),
+  asyncHandler(TeacherAvailabilityController.getCalendar)
+)
+
+// Single slot operations (parameterized routes come LAST)
+router.get(
+  '/availability/:id',
+  authenticateUser,
+  requireRole('teacher'),
+  asyncHandler(TeacherAvailabilityController.getSlot)
+)
+
+router.put(
+  '/availability/:id',
+  authenticateUser,
+  requireRole('teacher'),
+  asyncHandler(TeacherAvailabilityController.updateSlot)
+)
+
+router.delete(
+  '/availability/:id',
+  authenticateUser,
+  requireRole('teacher'),
+  asyncHandler(TeacherAvailabilityController.deleteSlot)
+)
+
+// ============================================================
+// PUBLIC ROUTES (must come LAST - after all protected routes)
+// ============================================================
+
+// Public availability for booking (filters out already-booked slots)
+router.get(
+  '/:teacherId/public-availability',
+  authenticateUser,
+  asyncHandler(bookingController.getPublicAvailability.bind(bookingController))
+)
+
+// Available slots for students (public - any authenticated user)
+router.get(
+  '/:teacherId/available-slots',
+  authenticateUser,
+  asyncHandler(TeacherAvailabilityController.getAvailableSlots)
+)
+
 router.get('/', asyncHandler(TeacherController.getAllTeachers))
 router.get('/:id', asyncHandler(TeacherController.getTeacherById))
 

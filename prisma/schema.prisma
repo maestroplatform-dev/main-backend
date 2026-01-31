@@ -495,6 +495,11 @@ model purchased_packages {
   package_id            String                       @db.Uuid
   teacher_id            String                       @db.Uuid
 
+  // Package details (stored for easy access)
+  instrument            String?
+  level                 String?
+  mode                  String?
+
   // Session tracking
   classes_total         Int
   classes_remaining     Int
@@ -571,6 +576,7 @@ model package_scheduled_sessions {
   day_of_week           Int                // 0=Sunday, 6=Saturday
   start_time            String             // "14:00" in HH:mm format
   duration_minutes      Int                @default(30)
+  meeting_link          String?            // Jitsi or other meeting link
 
   is_active             Boolean            @default(true)
   created_at            DateTime           @default(now()) @db.Timestamptz(6)

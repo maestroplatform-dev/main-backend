@@ -9,12 +9,14 @@ router.use(authenticateUser);
 
 // Student routes
 router.post("/request-demo", bookingController.requestDemo.bind(bookingController));
+router.post("/schedule-session", bookingController.scheduleSession.bind(bookingController));
 router.get("/student", bookingController.getStudentBookings.bind(bookingController));
 router.patch("/:id/confirm-reschedule", bookingController.confirmReschedule.bind(bookingController));
 
 // Teacher routes
 router.get("/teacher", bookingController.getTeacherBookings.bind(bookingController));
 router.get("/teacher/pending-count", bookingController.getPendingCount.bind(bookingController));
+router.get("/teacher/student/:studentId", bookingController.getStudentProfile.bind(bookingController));
 router.patch("/:id/accept", bookingController.acceptBooking.bind(bookingController));
 router.patch("/:id/reschedule", bookingController.rescheduleBooking.bind(bookingController));
 

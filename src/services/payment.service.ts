@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { nanoid } from 'nanoid';
 import { getRazorpayInstance } from '../config/razorpay';
 import prisma from '../config/database';
 import { payment_status, purchase_status, payment_option_type } from '@prisma/client';
@@ -25,9 +26,15 @@ interface CreateOrderRequest {
   student_id: string;
   package_id: string;
   teacher_id: string;
-  selected_slots: SelectedSlot[];
+  scheduled_sessions: Array<{
+    date: string;
+    start_time: string;
+    end_time: string;
+  }>;
+  instrument: string;
+  level: string;
+  mode: string;
   payment_option: 'FLEXIBLE' | 'UPFRONT';
-  sessions_to_pay: number;
 }
 
 interface CreateOrderResponse {
@@ -50,8 +57,17 @@ interface VerifyPaymentRequest {
 interface VerifyPaymentResponse {
   success: boolean;
   message: string;
-  purchased_package_id: string;
-  bookings_created: number;
+  purchase: {
+    id: string;
+    status: string;
+    sessions_booked: number;
+  };
+  bookings: Array<{
+    id: string;
+    date: string;
+    start_time: string;
+    end_time: string;
+  }>;
 }
 
 export class PaymentService {
@@ -125,7 +141,8 @@ export class PaymentService {
    * Creates a Razorpay order and initializes the purchased package
    */
   async createOrder(data: CreateOrderRequest): Promise<CreateOrderResponse> {
-    const { student_id, package_id, teacher_id, selected_slots, payment_option, sessions_to_pay } = data;
+    const { student_id, package_id, teacher_id, scheduled_sessions, instrument, level, mode, payment_option } = data;
+    const sessions_to_pay = scheduled_sessions.length;
 
     // Validate no existing package
     const canPurchase = await this.validateNoExistingPackage(student_id, teacher_id);
@@ -174,6 +191,9 @@ export class PaymentService {
         student_id,
         package_id,
         teacher_id,
+        instrument,
+        level,
+        mode,
         classes_total: classesCount,
         classes_remaining: classesCount,
         classes_completed: 0,
@@ -187,20 +207,6 @@ export class PaymentService {
         status: 'PENDING'
       }
     });
-
-    // Create scheduled sessions
-    for (const slot of selected_slots) {
-      await prisma.package_scheduled_sessions.create({
-        data: {
-          purchased_package_id: purchasedPackage.id,
-          teacher_id,
-          day_of_week: slot.day_of_week,
-          start_time: slot.start_time,
-          duration_minutes: slot.duration_minutes || 30,
-          is_active: true
-        }
-      });
-    }
 
     // Create Razorpay order
     const razorpayOrder = await getRazorpayInstance().orders.create({
@@ -216,7 +222,7 @@ export class PaymentService {
       }
     });
 
-    // Create payment record
+    // Create payment record with scheduled sessions data
     await prisma.purchase_payments.create({
       data: {
         purchased_package_id: purchasedPackage.id,
@@ -224,7 +230,10 @@ export class PaymentService {
         amount: amountToPay,
         currency: 'INR',
         sessions_covered: sessions_to_pay,
-        status: 'PENDING'
+        status: 'PENDING',
+        metadata: {
+          scheduled_sessions: scheduled_sessions
+        }
       }
     });
 
@@ -279,8 +288,12 @@ export class PaymentService {
       return {
         success: true,
         message: 'Payment already processed',
-        purchased_package_id,
-        bookings_created: 0
+        purchase: {
+          id: purchased_package_id,
+          status: 'ACTIVE',
+          sessions_booked: paymentRecord.sessions_covered
+        },
+        bookings: []
       };
     }
 
@@ -297,6 +310,9 @@ export class PaymentService {
     }
 
     // Step 4: Update payment record
+    // Preserve the scheduled_sessions from original metadata
+    const scheduledSessions = (paymentRecord.metadata as any)?.scheduled_sessions || [];
+    
     await prisma.purchase_payments.update({
       where: { id: paymentRecord.id },
       data: {
@@ -305,7 +321,10 @@ export class PaymentService {
         status: 'SUCCESS',
         payment_method: razorpayPayment.method,
         completed_at: new Date(),
-        metadata: JSON.parse(JSON.stringify(razorpayPayment))
+        metadata: {
+          scheduled_sessions: scheduledSessions,
+          razorpay_response: JSON.parse(JSON.stringify(razorpayPayment))
+        }
       }
     });
 
@@ -324,17 +343,44 @@ export class PaymentService {
       }
     });
 
-    // Step 6: Create bookings for the paid sessions
-    const bookingsCreated = await this.createBookingsForSessions(
+    // Step 6: Create bookings from stored scheduled sessions
+    const bookingsCreated = await this.createBookingsFromScheduledSessions(
+      purchasedPackage.student_id,
+      purchasedPackage.teacher_id,
       purchased_package_id,
-      paymentRecord.sessions_covered
+      scheduledSessions
     );
+
+    // Step 7: Fetch created bookings to return to frontend
+    const createdBookings = await prisma.bookings.findMany({
+      where: { purchased_package_id },
+      select: {
+        id: true,
+        scheduled_at: true,
+        duration_minutes: true
+      },
+      orderBy: { scheduled_at: 'asc' }
+    });
 
     return {
       success: true,
       message: 'Payment verified successfully',
-      purchased_package_id,
-      bookings_created: bookingsCreated
+      purchase: {
+        id: purchased_package_id,
+        status: 'ACTIVE',
+        sessions_booked: bookingsCreated
+      },
+      bookings: createdBookings.map(b => {
+        const startTime = b.scheduled_at.toISOString().split('T')[1].substring(0, 5);
+        const endDate = new Date(new Date(b.scheduled_at).getTime() + (b.duration_minutes || 60) * 60000);
+        const endTime = endDate.toISOString().split('T')[1].substring(0, 5);
+        return {
+          id: b.id,
+          date: b.scheduled_at.toISOString().split('T')[0],
+          start_time: startTime,
+          end_time: endTime
+        };
+      })
     };
   }
 
@@ -355,6 +401,54 @@ export class PaymentService {
       .digest('hex');
 
     return expectedSignature === signature;
+  }
+
+  /**
+   * Creates bookings from stored scheduled sessions (specific dates/times from cart)
+   */
+  private async createBookingsFromScheduledSessions(
+    studentId: string,
+    teacherId: string,
+    purchasedPackageId: string,
+    scheduledSessions: Array<{ date: string; start_time: string; end_time: string }>
+  ): Promise<number> {
+    let bookingsCreated = 0;
+
+    for (const session of scheduledSessions) {
+      try {
+        // Generate a unique meeting link for each session
+        const meetingId = nanoid(12);
+        const meetingLink = `https://meet.jit.si/Maestera-Session-${meetingId}`;
+
+        // Calculate duration in minutes
+        const [startHour, startMin] = session.start_time.split(':').map(Number);
+        const [endHour, endMin] = session.end_time.split(':').map(Number);
+        const duration_minutes = (endHour * 60 + endMin) - (startHour * 60 + startMin);
+
+        // Create booking with scheduled datetime
+        const scheduledAt = new Date(`${session.date}T${session.start_time}:00`);
+
+        await prisma.bookings.create({
+          data: {
+            student_id: studentId,
+            teacher_id: teacherId,
+            purchased_package_id: purchasedPackageId,
+            booking_type: 'PACKAGE',
+            scheduled_at: scheduledAt,
+            duration_minutes,
+            meeting_link: meetingLink,
+            is_demo: false,
+            status: 'SCHEDULED'
+          }
+        });
+
+        bookingsCreated++;
+      } catch (err) {
+        console.error('❌ Error creating booking for session:', session, err);
+      }
+    }
+
+    return bookingsCreated;
   }
 
   /**
@@ -588,6 +682,17 @@ export class PaymentService {
         purchase_payments: {
           where: { status: 'SUCCESS' },
           orderBy: { created_at: 'desc' }
+        },
+        scheduled_sessions: {
+          where: { is_active: true },
+          orderBy: { day_of_week: 'asc' }
+        },
+        bookings: {
+          where: {
+            status: { in: ['SCHEDULED', 'COMPLETED'] }
+          },
+          orderBy: { scheduled_at: 'asc' },
+          take: 10
         }
       },
       orderBy: { purchased_at: 'desc' }

@@ -42,6 +42,43 @@ export class BookingController {
   }
 
   /**
+   * POST /api/bookings/schedule-session
+   * Student schedules a session from a purchased package
+   */
+  async scheduleSession(req: AuthRequest, res: Response) {
+    try {
+      const studentId = req.user?.id;
+      if (!studentId) {
+        res.status(401).json({ error: "Unauthorized" });
+        return;
+      }
+
+      const { purchasedPackageId, scheduledAt, durationMinutes } = req.body;
+
+      if (!purchasedPackageId || !scheduledAt) {
+        res.status(400).json({ error: "purchasedPackageId and scheduledAt are required" });
+        return;
+      }
+
+      const booking = await bookingService.schedulePackageSession(
+        studentId,
+        purchasedPackageId,
+        new Date(scheduledAt),
+        durationMinutes || 60
+      );
+
+      res.status(201).json({
+        success: true,
+        message: "Session scheduled successfully",
+        data: booking,
+      });
+    } catch (error: any) {
+      console.error("Error scheduling session:", error);
+      res.status(400).json({ error: error.message || "Failed to schedule session" });
+    }
+  }
+
+  /**
    * GET /api/bookings/teacher
    * Get all bookings for the authenticated teacher
    */
@@ -310,6 +347,32 @@ export class BookingController {
     } catch (error: any) {
       console.error("Error fetching public availability:", error);
       res.status(500).json({ error: "Failed to fetch availability" });
+    }
+  }
+
+  /**
+   * GET /api/bookings/teacher/student/:studentId
+   * Get student profile with class history for a teacher
+   */
+  async getStudentProfile(req: AuthRequest, res: Response) {
+    try {
+      const teacherId = req.user?.id;
+      const { studentId } = req.params;
+
+      if (!teacherId) {
+        res.status(401).json({ error: "Unauthorized" });
+        return;
+      }
+
+      const profile = await bookingService.getStudentProfileForTeacher(teacherId, studentId);
+
+      res.json({
+        success: true,
+        data: profile,
+      });
+    } catch (error: any) {
+      console.error("Error fetching student profile:", error);
+      res.status(400).json({ error: error.message || "Failed to fetch student profile" });
     }
   }
 }

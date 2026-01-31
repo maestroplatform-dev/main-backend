@@ -1,10 +1,166 @@
 import prisma from "../config/database";
 import { booking_status } from "@prisma/client";
+import { nanoid } from 'nanoid';
 
 // Demo class duration in minutes
 const DEMO_DURATION_MINUTES = 30;
 
 export class BookingService {
+  /**
+   * Schedule a session from a purchased package
+   */
+  async schedulePackageSession(
+    studentId: string,
+    purchasedPackageId: string,
+    scheduledAt: Date,
+    durationMinutes: number = 60
+  ) {
+    // Verify the purchased package belongs to the student and is active
+    const purchasedPackage = await prisma.purchased_packages.findUnique({
+      where: { id: purchasedPackageId },
+      include: {
+        class_packages: {
+          include: {
+            teachers: {
+              select: { id: true, name: true }
+            }
+          }
+        }
+      }
+    });
+
+    if (!purchasedPackage) {
+      throw new Error("Package not found");
+    }
+
+    if (purchasedPackage.student_id !== studentId) {
+      throw new Error("This package does not belong to you");
+    }
+
+    if (purchasedPackage.status !== "ACTIVE") {
+      throw new Error("Package is not active");
+    }
+
+    // Check if there are remaining sessions
+    const bookedSessions = await prisma.bookings.count({
+      where: {
+        purchased_package_id: purchasedPackageId,
+        status: { notIn: ["CANCELLED"] }
+      }
+    });
+
+    if (bookedSessions >= purchasedPackage.class_packages.classes_count) {
+      throw new Error("All sessions from this package have been booked");
+    }
+
+    const teacherId = purchasedPackage.class_packages.teacher_id;
+
+    // Validate the slot is available for the requested duration
+    const isAvailable = await this.isSlotAvailableForDuration(
+      teacherId,
+      scheduledAt,
+      durationMinutes
+    );
+
+    if (!isAvailable) {
+      throw new Error("This time slot is no longer available");
+    }
+
+    // Create the booking
+    const booking = await prisma.bookings.create({
+      data: {
+        student_id: studentId,
+        teacher_id: teacherId,
+        purchased_package_id: purchasedPackageId,
+        package_id: purchasedPackage.package_id,
+        booking_type: "package_session",
+        status: "SCHEDULED", // Package sessions are auto-confirmed
+        scheduled_at: scheduledAt,
+        duration_minutes: durationMinutes,
+        is_demo: false,
+      },
+      include: {
+        students: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        teachers: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+    });
+
+    return booking;
+  }
+
+  /**
+   * Check if a time slot is available for a specific duration
+   */
+  async isSlotAvailableForDuration(
+    teacherId: string,
+    scheduledAt: Date,
+    durationMinutes: number
+  ): Promise<boolean> {
+    const dateStr = scheduledAt.toISOString().split("T")[0];
+    const startTimeStr = scheduledAt.toTimeString().slice(0, 5); // HH:MM format
+    
+    // Calculate end time
+    const endTime = new Date(scheduledAt.getTime() + durationMinutes * 60 * 1000);
+    const endTimeStr = endTime.toTimeString().slice(0, 5);
+
+    // Check if teacher has availability that covers this time range
+    const availability = await prisma.teacher_availability.findFirst({
+      where: {
+        teacher_id: teacherId,
+        specific_date: new Date(dateStr),
+        is_unavailable: false,
+        start_time: { lte: startTimeStr },
+        end_time: { gte: endTimeStr },
+      },
+    });
+
+    if (!availability) {
+      return false;
+    }
+
+    // Check for existing bookings that overlap
+    const existingBooking = await prisma.bookings.findFirst({
+      where: {
+        teacher_id: teacherId,
+        scheduled_at: {
+          lt: endTime,
+        },
+        status: {
+          in: ["PENDING_APPROVAL", "SCHEDULED", "RESCHEDULE_PROPOSED"],
+        },
+        AND: {
+          scheduled_at: {
+            gte: new Date(scheduledAt.getTime() - 12 * 60 * 60 * 1000), // Check bookings that might overlap
+          },
+        },
+      },
+    });
+
+    if (existingBooking) {
+      // Check if this booking actually overlaps
+      const bookingEnd = new Date(
+        existingBooking.scheduled_at.getTime() + 
+        (existingBooking.duration_minutes || 60) * 60 * 1000
+      );
+      
+      if (scheduledAt < bookingEnd && endTime > existingBooking.scheduled_at) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
   /**
    * Request a demo class (student -> teacher)
    * Creates a booking with PENDING_APPROVAL status
@@ -78,15 +234,20 @@ export class BookingService {
    */
   async isSlotAvailable(teacherId: string, scheduledAt: Date): Promise<boolean> {
     const dateStr = scheduledAt.toISOString().split("T")[0];
-    const timeStr = scheduledAt.toTimeString().slice(0, 5); // HH:MM format
+    const startTimeStr = scheduledAt.toTimeString().slice(0, 5); // HH:MM format
+    
+    // Calculate end time for demo
+    const endTime = new Date(scheduledAt.getTime() + DEMO_DURATION_MINUTES * 60 * 1000);
+    const endTimeStr = endTime.toTimeString().slice(0, 5);
 
-    // Check if teacher has this slot in their availability
+    // Check if teacher has availability that covers this time slot
     const availability = await prisma.teacher_availability.findFirst({
       where: {
         teacher_id: teacherId,
         specific_date: new Date(dateStr),
-        start_time: timeStr,
         is_unavailable: false,
+        start_time: { lte: startTimeStr },
+        end_time: { gte: endTimeStr },
       },
     });
 
@@ -94,23 +255,37 @@ export class BookingService {
       return false;
     }
 
-    // Check for existing bookings at this time
-    const endTime = new Date(scheduledAt.getTime() + DEMO_DURATION_MINUTES * 60 * 1000);
-    
+    // Check for existing bookings that overlap with this time slot
     const existingBooking = await prisma.bookings.findFirst({
       where: {
         teacher_id: teacherId,
         scheduled_at: {
-          gte: scheduledAt,
           lt: endTime,
         },
         status: {
           in: ["PENDING_APPROVAL", "SCHEDULED", "RESCHEDULE_PROPOSED"],
         },
+        AND: {
+          scheduled_at: {
+            gte: new Date(scheduledAt.getTime() - 12 * 60 * 60 * 1000), // Check bookings in a reasonable window
+          },
+        },
       },
     });
 
-    return !existingBooking;
+    if (existingBooking) {
+      // Check if this booking actually overlaps
+      const bookingEnd = new Date(
+        existingBooking.scheduled_at.getTime() + 
+        (existingBooking.duration_minutes || 60) * 60 * 1000
+      );
+      
+      if (scheduledAt < bookingEnd && endTime > existingBooking.scheduled_at) {
+        return false;
+      }
+    }
+
+    return true;
   }
 
   /**
@@ -295,10 +470,15 @@ export class BookingService {
       throw new Error("Booking cannot be accepted in current status");
     }
 
+    // Generate meeting link for the session
+    const meetingId = nanoid(12);
+    const meetingLink = `https://meet.jit.si/Maestera-Session-${meetingId}`;
+
     return prisma.bookings.update({
       where: { id: bookingId },
       data: {
         status: "SCHEDULED",
+        meeting_link: meetingLink,
         updated_at: new Date(),
       },
       include: {
@@ -446,6 +626,153 @@ export class BookingService {
         is_demo: true,
       },
     });
+  }
+
+  /**
+   * Get student profile with class history for a teacher
+   */
+  async getStudentProfileForTeacher(teacherId: string, studentId: string) {
+    // Verify teacher has bookings with this student
+    const hasBookings = await prisma.bookings.findFirst({
+      where: {
+        teacher_id: teacherId,
+        student_id: studentId,
+      },
+    });
+
+    if (!hasBookings) {
+      throw new Error("Student not found or no bookings with this teacher");
+    }
+
+    // Get student info with profile for email
+    const student = await prisma.students.findUnique({
+      where: { id: studentId },
+    });
+
+    if (!student) {
+      throw new Error("Student not found");
+    }
+
+    // Get profile for email
+    const profile = await prisma.profiles.findUnique({
+      where: { id: studentId },
+      select: { name: true },
+    });
+
+    // Get all bookings between this teacher and student
+    const bookings = await prisma.bookings.findMany({
+      where: {
+        teacher_id: teacherId,
+        student_id: studentId,
+      },
+      orderBy: { scheduled_at: "desc" },
+    });
+
+    // Calculate stats
+    const completedBookings = bookings.filter(b => b.status === "COMPLETED");
+    const scheduledBookings = bookings.filter(b => b.status === "SCHEDULED");
+    const totalBookings = bookings.length;
+    const attendance = totalBookings > 0 
+      ? Math.round((completedBookings.length / totalBookings) * 100) 
+      : 0;
+
+    // Get next upcoming class
+    const now = new Date();
+    const nextBooking = scheduledBookings
+      .filter(b => new Date(b.scheduled_at) > now)
+      .sort((a, b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime())[0];
+
+    // Get package progress if any
+    const purchasedPackages = await prisma.purchased_packages.findMany({
+      where: {
+        student_id: studentId,
+        status: "ACTIVE",
+      },
+      include: {
+        class_packages: {
+          select: {
+            classes_count: true,
+            teacher_id: true,
+          },
+        },
+      },
+    });
+
+    const teacherPackage = purchasedPackages.find(
+      p => p.class_packages?.teacher_id === teacherId
+    );
+
+    const packageProgress = teacherPackage
+      ? {
+          completed: teacherPackage.classes_completed || 0,
+          total: teacherPackage.class_packages?.classes_count || 0,
+        }
+      : { completed: 0, total: 0 };
+
+    // Format class history
+    const classHistory = bookings.map(booking => ({
+      id: booking.id,
+      date: new Date(booking.scheduled_at).toLocaleDateString("en-US", {
+        weekday: "short",
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      }),
+      time: `${new Date(booking.scheduled_at).toLocaleTimeString("en-US", {
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: true,
+      })} - ${new Date(new Date(booking.scheduled_at).getTime() + (booking.duration_minutes || 60) * 60000).toLocaleTimeString("en-US", {
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: true,
+      })}`,
+      topic: booking.is_demo ? "Demo Session" : "Class Session",
+      status: booking.status.toLowerCase() as "completed" | "cancelled" | "missed",
+      notes: booking.notes || undefined,
+    }));
+
+    return {
+      id: student.id,
+      name: student.name || profile?.name || "Unknown Student",
+      email: undefined, // Email would require auth.users access
+      age: student.date_of_birth 
+        ? Math.floor((new Date().getTime() - new Date(student.date_of_birth).getTime()) / (365.25 * 24 * 60 * 60 * 1000))
+        : 0,
+      avatar: student.profile_picture_url,
+      instrument: "Music", // Would need student instrument preferences
+      level: "Intermediate" as const,
+      progress: Math.min(100, Math.round((completedBookings.length / Math.max(1, totalBookings)) * 100)),
+      learningGoals: [], // Would need separate goals table
+      preferredSchedule: "", // Would need to store preferences
+      guardianName: student.guardian_name || undefined,
+      guardianPhone: student.guardian_phone || undefined,
+      guardianEmail: undefined, // Not in schema
+      packageProgress,
+      attendance,
+      nextClass: nextBooking
+        ? {
+            date: new Date(nextBooking.scheduled_at).toLocaleDateString("en-US", {
+              weekday: "short",
+              day: "numeric",
+              month: "short",
+              year: "numeric",
+            }),
+            time: `${new Date(nextBooking.scheduled_at).toLocaleTimeString("en-US", {
+              hour: "numeric",
+              minute: "2-digit",
+              hour12: true,
+            })} - ${new Date(new Date(nextBooking.scheduled_at).getTime() + (nextBooking.duration_minutes || 60) * 60000).toLocaleTimeString("en-US", {
+              hour: "numeric",
+              minute: "2-digit",
+              hour12: true,
+            })}`,
+            mode: "online" as const,
+            meetingLink: nextBooking.meeting_link,
+          }
+        : undefined,
+      classHistory,
+    };
   }
 }
 

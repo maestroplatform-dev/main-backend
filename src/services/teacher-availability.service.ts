@@ -436,6 +436,13 @@ export class TeacherAvailabilityService {
     const start = parseDate(startDate)
     const end = parseDate(endDate)
 
+    console.log("🔵 [TeacherAvailabilityService] getAvailableSlots called:", {
+      teacherId,
+      startDate,
+      endDate,
+      durationMinutes,
+    })
+
     // Get all availability slots in range
     const availability = await prisma.teacher_availability.findMany({
       where: {
@@ -449,7 +456,10 @@ export class TeacherAvailabilityService {
       orderBy: [{ specific_date: 'asc' }, { start_time: 'asc' }],
     })
 
+    console.log("📊 [TeacherAvailabilityService] Found availability slots:", availability.length, availability)
+
     if (availability.length === 0) {
+      console.warn("⚠️ [TeacherAvailabilityService] No availability slots found for teacher")
       return []
     }
 
@@ -468,6 +478,8 @@ export class TeacherAvailabilityService {
         duration_minutes: true,
       },
     })
+
+    console.log("📋 [TeacherAvailabilityService] Found existing bookings:", bookings.length)
 
     // Generate available slots
     const slots: { date: string; startTime: string; endTime: string; duration: number }[] = []
@@ -506,6 +518,7 @@ export class TeacherAvailabilityService {
       }
     }
 
+    console.log("✅ [TeacherAvailabilityService] Returning slots:", slots.length, slots.slice(0, 3))
     return slots
   }
 
@@ -550,6 +563,7 @@ export class TeacherAvailabilityService {
 
   /**
    * Get teacher's calendar view (availability + bookings)
+   * Note: Excludes PENDING_APPROVAL bookings (demos not yet accepted)
    */
   static async getCalendarView(teacherId: string, startDate: string, endDate: string) {
     const start = parseDate(startDate)
@@ -572,6 +586,10 @@ export class TeacherAvailabilityService {
           scheduled_at: {
             gte: start,
             lte: new Date(end.getTime() + 24 * 60 * 60 * 1000),
+          },
+          // Exclude pending approval demos - they should only appear after teacher accepts
+          status: {
+            not: 'PENDING_APPROVAL',
           },
         },
         include: {
@@ -603,6 +621,8 @@ export class TeacherAvailabilityService {
         booking_type: b.booking_type,
         student_name: b.students?.profiles?.name || 'Unknown',
         notes: b.notes,
+        meeting_link: b.meeting_link,
+        is_demo: b.is_demo,
       })),
     }
   }

@@ -14,13 +14,15 @@ interface ValidateScheduleBody {
 interface CreateOrderBody {
   package_id: string;
   teacher_id: string;
-  selected_slots: Array<{
-    day_of_week: number;
+  scheduled_sessions: Array<{
+    date: string;
     start_time: string;
-    duration_minutes?: number;
+    end_time: string;
   }>;
+  instrument: string;
+  level: string;
+  mode: string;
   payment_option: 'FLEXIBLE' | 'UPFRONT';
-  sessions_to_pay: number;
 }
 
 interface VerifyPaymentBody {
@@ -85,15 +87,15 @@ export class PaymentController {
         return res.status(401).json({ error: 'Unauthorized' });
       }
 
-      const { package_id, teacher_id, selected_slots, payment_option, sessions_to_pay } = req.body;
+      const { package_id, teacher_id, scheduled_sessions, instrument, level, mode, payment_option } = req.body;
 
       // Validate required fields
-      if (!package_id || !teacher_id || !selected_slots || !payment_option || !sessions_to_pay) {
+      if (!package_id || !teacher_id || !scheduled_sessions || !instrument || !level || !mode || !payment_option) {
         return res.status(400).json({ error: 'Missing required fields' });
       }
 
-      if (selected_slots.length === 0 || selected_slots.length > 3) {
-        return res.status(400).json({ error: 'Please select 1-3 time slots' });
+      if (scheduled_sessions.length === 0) {
+        return res.status(400).json({ error: 'Please schedule at least one session' });
       }
 
       if (!['FLEXIBLE', 'UPFRONT'].includes(payment_option)) {
@@ -104,9 +106,11 @@ export class PaymentController {
         student_id: userId,
         package_id,
         teacher_id,
-        selected_slots,
-        payment_option,
-        sessions_to_pay
+        scheduled_sessions,
+        instrument,
+        level,
+        mode,
+        payment_option
       });
 
       return res.status(200).json({
@@ -205,9 +209,51 @@ export class PaymentController {
 
       const packages = await paymentService.getStudentPackages(userId);
 
+      // Transform raw database records into frontend-expected format
+      const transformedPackages = packages.map(pkg => ({
+        id: pkg.id,
+        teacher_id: pkg.teacher_id,
+        package_id: pkg.package_id,
+        instrument: pkg.instrument,
+        level: pkg.level,
+        mode: pkg.mode,
+        payment_option: pkg.payment_option,
+        status: pkg.status,
+        total_sessions: pkg.classes_total,
+        sessions_booked: pkg.bookings?.length || 0,
+        sessions_remaining: pkg.classes_remaining,
+        total_amount: Number(pkg.total_package_price),
+        amount_paid: Number(pkg.amount_paid),
+        amount_remaining: Number(pkg.amount_remaining),
+        created_at: pkg.purchased_at?.toISOString() || new Date().toISOString(),
+        teacher: pkg.teachers,
+        package: {
+          id: pkg.class_packages?.id,
+          name: pkg.class_packages?.name || `${pkg.classes_total} Sessions`,
+          classes_count: pkg.class_packages?.classes_count || pkg.classes_total,
+          validity_days: pkg.class_packages?.validity_days || 0
+        },
+        scheduled_sessions: (pkg.scheduled_sessions || []).map((ss, idx) => ({
+          id: ss.id,
+          session_number: idx + 1,
+          date: '',
+          start_time: ss.start_time,
+          end_time: '',
+          booking_id: null
+        })),
+        bookings: (pkg.bookings || []).map(b => ({
+          id: b.id,
+          date: b.scheduled_at?.toISOString().split('T')[0] || '',
+          start_time: b.scheduled_at?.toISOString().split('T')[1]?.substring(0, 5) || '',
+          end_time: '',
+          status: b.status,
+          meeting_link: b.meeting_link
+        }))
+      }));
+
       return res.status(200).json({
         success: true,
-        data: packages
+        data: transformedPackages
       });
     } catch (error: any) {
       console.error('❌ Error fetching packages:', error);
@@ -231,20 +277,63 @@ export class PaymentController {
 
       const { packageId } = req.params;
 
-      const packageDetails = await paymentService.getPackageDetails(packageId);
+      const pkg = await paymentService.getPackageDetails(packageId);
 
-      if (!packageDetails) {
+      if (!pkg) {
         return res.status(404).json({ error: 'Package not found' });
       }
 
       // Verify the package belongs to the user
-      if (packageDetails.student_id !== userId && packageDetails.teacher_id !== userId) {
+      if (pkg.student_id !== userId && pkg.teacher_id !== userId) {
         return res.status(403).json({ error: 'Forbidden' });
       }
 
+      // Transform to frontend format
+      const transformedPackage = {
+        id: pkg.id,
+        teacher_id: pkg.teacher_id,
+        package_id: pkg.package_id,
+        instrument: pkg.instrument,
+        level: pkg.level,
+        mode: pkg.mode,
+        payment_option: pkg.payment_option,
+        status: pkg.status,
+        total_sessions: pkg.classes_total,
+        sessions_booked: pkg.bookings?.length || 0,
+        sessions_remaining: pkg.classes_remaining,
+        total_amount: Number(pkg.total_package_price),
+        amount_paid: Number(pkg.amount_paid),
+        amount_remaining: Number(pkg.amount_remaining),
+        created_at: pkg.purchased_at?.toISOString() || new Date().toISOString(),
+        teacher: pkg.teachers,
+        package: {
+          id: pkg.class_packages?.id,
+          name: pkg.class_packages?.name || `${pkg.classes_total} Sessions`,
+          classes_count: pkg.class_packages?.classes_count || pkg.classes_total,
+          validity_days: pkg.class_packages?.validity_days || 0
+        },
+        scheduled_sessions: (pkg.scheduled_sessions || []).map((ss, idx) => ({
+          id: ss.id,
+          session_number: idx + 1,
+          date: '',
+          start_time: ss.start_time,
+          end_time: '',
+          booking_id: null
+        })),
+        bookings: (pkg.bookings || []).map(b => ({
+          id: b.id,
+          date: b.scheduled_at?.toISOString().split('T')[0] || '',
+          start_time: b.scheduled_at?.toISOString().split('T')[1]?.substring(0, 5) || '',
+          end_time: '',
+          status: b.status,
+          meeting_link: b.meeting_link
+        })),
+        payments: pkg.purchase_payments || []
+      };
+
       return res.status(200).json({
         success: true,
-        data: packageDetails
+        data: transformedPackage
       });
     } catch (error: any) {
       console.error('❌ Error fetching package details:', error);

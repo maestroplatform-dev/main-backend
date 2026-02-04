@@ -258,7 +258,7 @@ export const teacherProfileUpdateSchema = z.object({
   youtube_links: z.array(z.string().url('Invalid YouTube URL')).optional(),
   demo: z.boolean().optional(),
   media_consent: z.boolean().optional(),
-  profile_picture: z.string().url('Invalid picture URL').optional(),
+  profile_picture: z.string().url('Invalid picture URL').optional().or(z.literal('')).or(z.null()),
   teaching_style: z.string().optional(),
   professional_experience: z.string().optional(),
 })

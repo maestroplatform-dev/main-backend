@@ -12,10 +12,13 @@ router.get('/stats', apiLimiter, authenticateUser, requireRole('admin'), asyncHa
 
 // Teacher management
 router.get('/teachers', apiLimiter, authenticateUser, requireRole('admin'), asyncHandler(AdminController.listTeachers))
+router.get('/teachers/pending-review', apiLimiter, authenticateUser, requireRole('admin'), asyncHandler(AdminController.getTeachersPendingReview))
 router.get('/teachers/:id/onboarding', apiLimiter, authenticateUser, requireRole('admin'), asyncHandler(AdminController.getTeacherOnboardingData))
+router.get('/teachers/:id/bank-details', apiLimiter, authenticateUser, requireRole('admin'), asyncHandler(AdminController.getTeacherBankDetails))
 router.get('/teachers/:id', apiLimiter, authenticateUser, requireRole('admin'), asyncHandler(AdminController.getTeacherDetails))
 router.put('/teachers/:id', apiLimiter, authenticateUser, requireRole('admin'), asyncHandler(AdminController.updateTeacherDetails))
 router.patch('/teachers/:id/verify', apiLimiter, authenticateUser, requireRole('admin'), asyncHandler(AdminController.updateTeacherVerification))
+router.post('/teachers/:id/review', apiLimiter, authenticateUser, requireRole('admin'), asyncHandler(AdminController.reviewTeacherProfile))
 router.post('/teachers/register', apiLimiter, authenticateUser, requireRole('admin'), asyncHandler(AdminController.registerTeacher))
 
 // User management

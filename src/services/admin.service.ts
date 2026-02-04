@@ -711,4 +711,141 @@ export class AdminService {
       },
     }
   }
+
+  // Get teacher bank details for payout
+  static async getTeacherBankDetails(teacherId: string) {
+    // First verify teacher exists
+    const teacher = await prisma.teachers.findUnique({
+      where: { id: teacherId },
+      select: {
+        id: true,
+        name: true,
+        profiles: {
+          select: {
+            users: {
+              select: {
+                email: true,
+              }
+            }
+          }
+        }
+      }
+    })
+
+    if (!teacher) {
+      throw new AppError(404, 'Teacher not found', 'TEACHER_NOT_FOUND')
+    }
+
+    // Get bank details
+    const bankDetails = await prisma.teacher_bank_details.findUnique({
+      where: { teacher_id: teacherId },
+      select: {
+        id: true,
+        bank_name: true,
+        account_holder_name: true,
+        account_number: true,
+        gst_number: true,
+        ifsc_code: true,
+        verified: true,
+        created_at: true,
+        updated_at: true,
+      }
+    })
+
+    return {
+      teacher: {
+        id: teacher.id,
+        name: teacher.name,
+        email: teacher.profiles?.users?.email,
+      },
+      bank_details: bankDetails,
+    }
+  }
+
+  // Get all teachers pending review
+  static async getTeachersPendingReview() {
+    const teachers = await prisma.teachers.findMany({
+      where: { profile_status: 'pending_review' },
+      include: {
+        profiles: {
+          include: {
+            users: true,
+          },
+        },
+        teacher_instruments: {
+          include: {
+            teacher_instrument_tiers: true,
+          },
+        },
+        teacher_bank_details: true,
+      },
+      orderBy: { profile_submitted_at: 'asc' },
+    })
+
+    return teachers.map(t => ({
+      id: t.id,
+      name: t.name || t.profiles?.name,
+      email: t.profiles?.users?.email,
+      profilePicture: t.profile_picture,
+      submittedAt: t.profile_submitted_at,
+      instrumentCount: t.teacher_instruments.length,
+      hasBankDetails: !!t.teacher_bank_details,
+    }))
+  }
+
+  // Approve or reject teacher profile
+  static async reviewTeacherProfile(
+    adminId: string,
+    teacherId: string,
+    action: 'approve' | 'reject' | 'request_changes',
+    notes?: string
+  ) {
+    const teacher = await prisma.teachers.findUnique({
+      where: { id: teacherId },
+    })
+
+    if (!teacher) {
+      throw new AppError(404, 'Teacher not found', 'TEACHER_NOT_FOUND')
+    }
+
+    if (teacher.profile_status !== 'pending_review') {
+      throw new AppError(400, 'Teacher profile is not pending review', 'NOT_PENDING_REVIEW')
+    }
+
+    let newStatus: 'approved' | 'rejected' | 'changes_requested'
+    switch (action) {
+      case 'approve':
+        newStatus = 'approved'
+        break
+      case 'reject':
+        newStatus = 'rejected'
+        break
+      case 'request_changes':
+        newStatus = 'changes_requested'
+        break
+      default:
+        throw new AppError(400, 'Invalid action', 'INVALID_ACTION')
+    }
+
+    const updated = await prisma.teachers.update({
+      where: { id: teacherId },
+      data: {
+        profile_status: newStatus,
+        profile_reviewed_at: new Date(),
+        profile_review_notes: notes || null,
+        // If approved, also verify the teacher
+        ...(newStatus === 'approved' ? { verified: true } : {}),
+      },
+    })
+
+    // TODO: Send email notification to teacher about the review result
+
+    return {
+      success: true,
+      teacherId,
+      newStatus: updated.profile_status,
+      reviewedAt: updated.profile_reviewed_at,
+      notes: updated.profile_review_notes,
+    }
+  }
 }

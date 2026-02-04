@@ -26,6 +26,21 @@ router.get(
   asyncHandler(TeacherOnboardingController.getOnboardingData)
 )
 
+// Engagement preferences endpoints
+router.post(
+  '/engagement-preferences',
+  authenticateUser,
+  requireRole('teacher'),
+  asyncHandler(TeacherOnboardingController.saveEngagementPreferences)
+)
+
+router.get(
+  '/engagement-preferences',
+  authenticateUser,
+  requireRole('teacher'),
+  asyncHandler(TeacherOnboardingController.getEngagementPreferences)
+)
+
 // Old onboarding route (kept for compatibility)
 router.post(
   '/onboard',
@@ -54,6 +69,72 @@ router.patch(
   authenticateUser,
   requireRole('teacher'),
   asyncHandler(TeacherController.updateProfile)
+)
+
+// Bank details routes
+router.get(
+  '/bank-details',
+  authenticateUser,
+  requireRole('teacher'),
+  asyncHandler(TeacherController.getBankDetails)
+)
+
+router.post(
+  '/bank-details',
+  authenticateUser,
+  requireRole('teacher'),
+  asyncHandler(TeacherController.saveBankDetails)
+)
+
+router.put(
+  '/bank-details',
+  authenticateUser,
+  requireRole('teacher'),
+  asyncHandler(TeacherController.saveBankDetails)
+)
+
+// Instrument/Pricing routes
+router.get(
+  '/instruments',
+  authenticateUser,
+  requireRole('teacher'),
+  asyncHandler(TeacherController.getInstruments)
+)
+
+router.post(
+  '/instruments',
+  authenticateUser,
+  requireRole('teacher'),
+  asyncHandler(TeacherController.createInstrument)
+)
+
+router.put(
+  '/instruments/:id',
+  authenticateUser,
+  requireRole('teacher'),
+  asyncHandler(TeacherController.updateInstrument)
+)
+
+router.delete(
+  '/instruments/:id',
+  authenticateUser,
+  requireRole('teacher'),
+  asyncHandler(TeacherController.deleteInstrument)
+)
+
+// Profile completion and review routes
+router.get(
+  '/profile-completion',
+  authenticateUser,
+  requireRole('teacher'),
+  asyncHandler(TeacherController.getProfileCompletionStatus)
+)
+
+router.post(
+  '/submit-for-review',
+  authenticateUser,
+  requireRole('teacher'),
+  asyncHandler(TeacherController.submitProfileForReview)
 )
 
 // ============================================================

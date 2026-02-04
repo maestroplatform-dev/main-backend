@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import { AdminController } from '../controllers/admin.controller'
+import { FeaturedTeachersController } from '../controllers/featured-teachers.controller'
 import { authenticateUser, requireRole } from '../middleware/auth'
 import { apiLimiter } from '../middleware/rateLimiter'
 import { asyncHandler } from '../utils/asyncHandler'
@@ -48,5 +49,12 @@ router.put(
 
 // Audit logs
 router.get('/audit-logs', apiLimiter, authenticateUser, requireRole('admin'), asyncHandler(AdminController.getAuditLogs))
+
+// Featured teachers management
+router.get('/featured-teachers', apiLimiter, authenticateUser, requireRole('admin'), asyncHandler(FeaturedTeachersController.getAdminFeaturedTeachers))
+router.put('/featured-teachers', apiLimiter, authenticateUser, requireRole('admin'), asyncHandler(FeaturedTeachersController.setFeaturedTeachers))
+router.post('/featured-teachers', apiLimiter, authenticateUser, requireRole('admin'), asyncHandler(FeaturedTeachersController.addFeaturedTeacher))
+router.delete('/featured-teachers/:teacherId', apiLimiter, authenticateUser, requireRole('admin'), asyncHandler(FeaturedTeachersController.removeFeaturedTeacher))
+router.patch('/featured-teachers/order', apiLimiter, authenticateUser, requireRole('admin'), asyncHandler(FeaturedTeachersController.updateDisplayOrder))
 
 export default router

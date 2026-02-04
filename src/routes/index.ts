@@ -3,6 +3,7 @@ import healthRoutes from './health.routes'
 import testRoutes from './test.routes'
 import authRoutes from './auth.routes'
 import studentAuthRoutes from './student-auth.routes'
+import studentPreferencesRoutes from './student-preferences.routes'
 import teacherRoutes from './teachers.routes'
 import adminRoutes from './admin.routes'
 import bookingRoutes from './booking.routes'
@@ -21,6 +22,7 @@ router.use(testRoutes)
 router.use('/api/v1/auth', authRoutes)
 router.use('/api/v1/auth/student', studentAuthRoutes)
 router.use('/api/v1/student', authenticateUser, studentAuthRoutes)
+router.use('/api/v1/student', studentPreferencesRoutes)
 router.use('/api/v1/teachers', teacherRoutes)
 router.use('/api/v1/admin', adminRoutes)
 router.use('/api/v1/bookings', bookingRoutes)

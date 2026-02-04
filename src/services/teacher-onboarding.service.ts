@@ -113,14 +113,18 @@ export class TeacherOnboardingService {
         await (tx as any).teacher_instruments.deleteMany({ where: { teacher_id: teacherId } })
 
         // Insert instruments and tiers
+        console.log('[TeacherOnboardingService] Received instruments data:', JSON.stringify(data.instruments.map((i: any) => ({ instrument: i.instrument, teach_or_perform: i.teach_or_perform })), null, 2));
         for (const inst of data.instruments) {
-          if (inst.teach_or_perform === 'Teach') {
+          const normalizedType = inst.teach_or_perform.toLowerCase();
+          console.log(`[TeacherOnboardingService] Processing instrument: ${inst.instrument}, Original: "${inst.teach_or_perform}", Normalized: "${normalizedType}"`);
+          if (normalizedType === 'teach') {
+            const teachInst = inst as any;
             const instrumentRow = await (tx as any).teacher_instruments.create({
               data: {
                 teacher_id: teacherId,
                 instrument: inst.instrument,
-                teach_or_perform: inst.teach_or_perform,
-                class_mode: inst.class_mode,
+                teach_or_perform: normalizedType,
+                class_mode: teachInst.class_mode,
                 base_price: null,
                 performance_fee_inr: null,
                 performance_fee_foreign: null,
@@ -128,14 +132,14 @@ export class TeacherOnboardingService {
               },
             })
 
-            const tiers = (inst.tiers || []).map((tier) => {
+            const tiers = (teachInst.tiers || []).map((tier: any) => {
               const priceForeign = data.open_to_international && data.international_premium
                 ? tier.price_inr + data.international_premium
                 : null
               return {
                 teacher_instrument_id: instrumentRow.id,
                 level: tier.level,
-                mode: inst.class_mode,
+                mode: teachInst.class_mode,
                 // Teacher's net price and optional platform markup
                 price_inr: tier.price_inr,
                 platform_markup_inr: tier.platform_markup_inr ?? null,
@@ -149,19 +153,20 @@ export class TeacherOnboardingService {
               await (tx as any).teacher_instrument_tiers.createMany({ data: tiers })
             }
           } else {
+            const performInst = inst as any;
             await (tx as any).teacher_instruments.create({
               data: {
                 teacher_id: teacherId,
                 instrument: inst.instrument,
-                teach_or_perform: inst.teach_or_perform,
+                teach_or_perform: normalizedType,
                 class_mode: null,
                 base_price: null,
                 // Teacher performance fee and optional platform markup
-                performance_fee_inr: inst.performance_fee_inr,
-                performance_platform_markup_inr: inst.platform_markup_inr ?? null,
+                performance_fee_inr: performInst.performance_fee_inr,
+                performance_platform_markup_inr: performInst.platform_markup_inr ?? null,
                 performance_fee_foreign:
                   data.open_to_international && data.international_premium
-                    ? inst.performance_fee_inr + data.international_premium
+                    ? performInst.performance_fee_inr + data.international_premium
                     : null,
                 // Removed open_to_international and international_premium
                 package_card_points: inst.package_card_points || null,
@@ -177,9 +182,9 @@ export class TeacherOnboardingService {
 
         if (existingPackages.length === 0) {
           // Get beginner tier price from first teaching instrument
-          const firstTeachingInstrument = data.instruments.find(i => i.teach_or_perform === 'Teach')
+          const firstTeachingInstrument = data.instruments.find(i => i.teach_or_perform.toLowerCase() === 'teach') as any
           if (firstTeachingInstrument && firstTeachingInstrument.tiers && firstTeachingInstrument.tiers.length > 0) {
-            const beginnerTier = firstTeachingInstrument.tiers.find(t => t.level === 'beginner')
+            const beginnerTier = firstTeachingInstrument.tiers.find((t: any) => t.level === 'beginner')
             if (beginnerTier && beginnerTier.price_inr) {
               const basePrice = beginnerTier.price_inr
 
@@ -294,6 +299,142 @@ export class TeacherOnboardingService {
       teacher_engagements: engagements,
       teacher_formats: formats,
       teacher_instruments: normalizedInstruments,
+    }
+  }
+
+  // Save engagement preferences only (simplified onboarding)
+  static async saveEngagementPreferences(teacherId: string, data: {
+    engagement_type: 'Teaching' | 'Performance' | 'Both'
+    collaborative_projects: string[]
+    collaborative_other?: string
+    class_formats?: string[]
+    class_formats_other?: string
+    exam_training?: string[]
+    exam_training_other?: string
+    additional_formats?: string[]
+    additional_formats_other?: string
+    learner_groups?: string[]
+    learner_groups_other?: string
+    performance_settings?: string[]
+    performance_settings_other?: string
+    performance_fee_per_hour?: number
+    other_contribution?: string
+  }) {
+    const teacher = await prisma.teachers.findUnique({
+      where: { id: teacherId },
+    })
+
+    if (!teacher) {
+      throw new AppError(404, 'Teacher not found', 'TEACHER_NOT_FOUND')
+    }
+
+    try {
+      await prisma.$transaction(async (tx) => {
+        // Update engagement type on teacher
+        await tx.teachers.update({
+          where: { id: teacherId },
+          data: {
+            engagement_type: data.engagement_type,
+            onboarding_completed: true,
+          },
+        })
+
+        // Engagement preferences
+        await (tx as any).teacher_engagements.upsert({
+          where: { teacher_id: teacherId },
+          create: {
+            teacher_id: teacherId,
+            engagement_type: data.engagement_type,
+            collaborative_projects: data.collaborative_projects || [],
+            collaborative_other: data.collaborative_other || '',
+            performance_fee_per_hour: data.performance_fee_per_hour || 0,
+          },
+          update: {
+            engagement_type: data.engagement_type,
+            collaborative_projects: data.collaborative_projects || [],
+            collaborative_other: data.collaborative_other || '',
+            performance_fee_per_hour: data.performance_fee_per_hour || 0,
+          },
+        })
+
+        // Teaching formats (if provided)
+        await (tx as any).teacher_formats.upsert({
+          where: { teacher_id: teacherId },
+          create: {
+            teacher_id: teacherId,
+            class_formats: data.class_formats || [],
+            class_formats_other: data.class_formats_other || '',
+            exam_training: data.exam_training || [],
+            exam_training_other: data.exam_training_other || '',
+            additional_formats: data.additional_formats || [],
+            additional_formats_other: data.additional_formats_other || '',
+            learner_groups: data.learner_groups || [],
+            learner_groups_other: data.learner_groups_other || '',
+            performance_settings: data.performance_settings || [],
+            performance_settings_other: data.performance_settings_other || '',
+            other_contribution: data.other_contribution || '',
+          },
+          update: {
+            class_formats: data.class_formats || [],
+            class_formats_other: data.class_formats_other || '',
+            exam_training: data.exam_training || [],
+            exam_training_other: data.exam_training_other || '',
+            additional_formats: data.additional_formats || [],
+            additional_formats_other: data.additional_formats_other || '',
+            learner_groups: data.learner_groups || [],
+            learner_groups_other: data.learner_groups_other || '',
+            performance_settings: data.performance_settings || [],
+            performance_settings_other: data.performance_settings_other || '',
+            other_contribution: data.other_contribution || '',
+          },
+        })
+      })
+
+      return {
+        success: true,
+        message: 'Engagement preferences saved successfully',
+      }
+    } catch (error: any) {
+      console.error('Error saving engagement preferences:', error)
+      throw new AppError(500, 'Failed to save engagement preferences', 'SAVE_FAILED')
+    }
+  }
+
+  // Get engagement preferences
+  static async getEngagementPreferences(teacherId: string) {
+    const teacher = await prisma.teachers.findUnique({
+      where: { id: teacherId },
+      select: { engagement_type: true },
+    })
+
+    if (!teacher) {
+      throw new AppError(404, 'Teacher not found', 'TEACHER_NOT_FOUND')
+    }
+
+    const engagements = await (prisma as any).teacher_engagements.findUnique({
+      where: { teacher_id: teacherId },
+    })
+
+    const formats = await (prisma as any).teacher_formats.findUnique({
+      where: { teacher_id: teacherId },
+    })
+
+    return {
+      engagement_type: teacher.engagement_type || engagements?.engagement_type || null,
+      collaborative_projects: engagements?.collaborative_projects || [],
+      collaborative_other: engagements?.collaborative_other || '',
+      performance_fee_per_hour: engagements?.performance_fee_per_hour || 0,
+      class_formats: formats?.class_formats || [],
+      class_formats_other: formats?.class_formats_other || '',
+      exam_training: formats?.exam_training || [],
+      exam_training_other: formats?.exam_training_other || '',
+      additional_formats: formats?.additional_formats || [],
+      additional_formats_other: formats?.additional_formats_other || '',
+      learner_groups: formats?.learner_groups || [],
+      learner_groups_other: formats?.learner_groups_other || '',
+      performance_settings: formats?.performance_settings || [],
+      performance_settings_other: formats?.performance_settings_other || '',
+      other_contribution: formats?.other_contribution || '',
     }
   }
 }

@@ -8,6 +8,7 @@ import teacherRoutes from './teachers.routes'
 import adminRoutes from './admin.routes'
 import bookingRoutes from './booking.routes'
 import paymentRoutes from './payment.routes'
+import featuredTeachersRoutes from './featured-teachers.routes'
 import { authenticateUser } from '../middleware/auth'
 
 const router = Router()
@@ -27,5 +28,6 @@ router.use('/api/v1/teachers', teacherRoutes)
 router.use('/api/v1/admin', adminRoutes)
 router.use('/api/v1/bookings', bookingRoutes)
 router.use('/api/v1/payments', paymentRoutes)
+router.use('/api/v1/featured-teachers', featuredTeachersRoutes)
 
 export default router

@@ -1,6 +1,8 @@
 import { Router } from 'express'
 import { AdminController } from '../controllers/admin.controller'
 import { FeaturedTeachersController } from '../controllers/featured-teachers.controller'
+import { SectionReviewController } from '../controllers/section-review.controller'
+import { SpecificPoliciesController } from '../controllers/specific-policies.controller'
 import { authenticateUser, requireRole } from '../middleware/auth'
 import { apiLimiter } from '../middleware/rateLimiter'
 import { asyncHandler } from '../utils/asyncHandler'
@@ -12,14 +14,19 @@ router.get('/stats', apiLimiter, authenticateUser, requireRole('admin'), asyncHa
 
 // Teacher management
 router.get('/teachers', apiLimiter, authenticateUser, requireRole('admin'), asyncHandler(AdminController.listTeachers))
-router.get('/teachers/pending-review', apiLimiter, authenticateUser, requireRole('admin'), asyncHandler(AdminController.getTeachersPendingReview))
 router.get('/teachers/:id/onboarding', apiLimiter, authenticateUser, requireRole('admin'), asyncHandler(AdminController.getTeacherOnboardingData))
 router.get('/teachers/:id/bank-details', apiLimiter, authenticateUser, requireRole('admin'), asyncHandler(AdminController.getTeacherBankDetails))
 router.get('/teachers/:id', apiLimiter, authenticateUser, requireRole('admin'), asyncHandler(AdminController.getTeacherDetails))
 router.put('/teachers/:id', apiLimiter, authenticateUser, requireRole('admin'), asyncHandler(AdminController.updateTeacherDetails))
 router.patch('/teachers/:id/verify', apiLimiter, authenticateUser, requireRole('admin'), asyncHandler(AdminController.updateTeacherVerification))
-router.post('/teachers/:id/review', apiLimiter, authenticateUser, requireRole('admin'), asyncHandler(AdminController.reviewTeacherProfile))
 router.post('/teachers/register', apiLimiter, authenticateUser, requireRole('admin'), asyncHandler(AdminController.registerTeacher))
+
+// Section-level review routes (admin)
+router.get('/section-reviews/pending', apiLimiter, authenticateUser, requireRole('admin'), asyncHandler(SectionReviewController.getPendingReviews))
+router.post('/section-reviews/:reviewId/action', apiLimiter, authenticateUser, requireRole('admin'), asyncHandler(SectionReviewController.reviewSection))
+
+// Teacher specific policies (admin view)
+router.get('/teachers/:teacherId/specific-policies', apiLimiter, authenticateUser, requireRole('admin'), asyncHandler(SpecificPoliciesController.adminGetTeacherPolicies))
 
 // User management
 router.get('/users', apiLimiter, authenticateUser, requireRole('admin'), asyncHandler(AdminController.listUsers))

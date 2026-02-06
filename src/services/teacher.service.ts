@@ -1,27 +1,7 @@
 import prisma from '../config/database'
 import { AppError } from '../types'
 import { TeacherOnboardingInput, TeacherProfileUpdateInput } from '../utils/validation'
-
-// Helper to reset profile status when major changes are made
-async function resetProfileStatusIfApproved(teacherId: string) {
-  const teacher = await prisma.teachers.findUnique({
-    where: { id: teacherId },
-    select: { profile_status: true },
-  })
-
-  // Reset to draft if profile was previously approved or pending review
-  if (teacher && (teacher.profile_status === 'approved' || teacher.profile_status === 'pending_review')) {
-    await prisma.teachers.update({
-      where: { id: teacherId },
-      data: {
-        profile_status: 'changes_requested',
-        profile_review_notes: 'Profile was modified and requires re-review.',
-      },
-    })
-    return true
-  }
-  return false
-}
+import { SectionReviewService } from './section-review.service'
 
 export class TeacherService {
   // Complete teacher onboarding
@@ -201,13 +181,6 @@ export class TeacherService {
       data: updateData,
     })
 
-    // Reset profile status if major profile fields changed
-    const majorFields = ['bio', 'name', 'tagline', 'education', 'teaching_style', 'professional_experience', 'youtube_links']
-    const hasMajorChange = majorFields.some(field => (data as any)[field] !== undefined)
-    if (hasMajorChange) {
-      await resetProfileStatusIfApproved(teacherId)
-    }
-
     // Update languages if provided
     if (data.languages && data.languages.length > 0) {
       // Delete existing languages
@@ -223,6 +196,9 @@ export class TeacherService {
         })),
       })
     }
+
+    // Void profile section approval if approved/pending
+    await SectionReviewService.voidSectionApproval(teacherId, 'profile')
 
     return updated
   }
@@ -448,14 +424,14 @@ export class TeacherService {
       })
     }
 
-    // Reset profile status since instruments changed
-    await resetProfileStatusIfApproved(teacherId)
-
     // Fetch and return with tiers
     const result = await prisma.teacher_instruments.findUnique({
       where: { id: instrument.id },
       include: { teacher_instrument_tiers: true },
     })
+
+    // Void pricing section approval if approved/pending
+    await SectionReviewService.voidSectionApproval(teacherId, 'pricing')
 
     return result
   }
@@ -521,14 +497,14 @@ export class TeacherService {
       }
     }
 
-    // Reset profile status since instruments changed
-    await resetProfileStatusIfApproved(teacherId)
-
     // Fetch and return with tiers
     const result = await prisma.teacher_instruments.findUnique({
       where: { id: instrumentId },
       include: { teacher_instrument_tiers: true },
     })
+
+    // Void pricing section approval if approved/pending
+    await SectionReviewService.voidSectionApproval(teacherId, 'pricing')
 
     return result
   }
@@ -549,8 +525,8 @@ export class TeacherService {
       where: { id: instrumentId },
     })
 
-    // Reset profile status since instruments changed
-    await resetProfileStatusIfApproved(teacherId)
+    // Void pricing section approval if approved/pending
+    await SectionReviewService.voidSectionApproval(teacherId, 'pricing')
 
     return { deleted: true }
   }
@@ -614,52 +590,9 @@ export class TeacherService {
     const completedSections = Object.values(sections).filter(s => s.completed).length
     const completionPercentage = Math.round((completedSections / totalSections) * 100)
 
-    // Check if all required sections are complete for review submission
-    const canSubmitForReview = completionPercentage === 100
-
     return {
       sections,
       completionPercentage,
-      canSubmitForReview,
-      profileStatus: teacher.profile_status,
-      profileSubmittedAt: teacher.profile_submitted_at,
-      profileReviewedAt: teacher.profile_reviewed_at,
-      profileReviewNotes: teacher.profile_review_notes,
-    }
-  }
-
-  // Submit profile for review
-  static async submitProfileForReview(teacherId: string) {
-    // First check completion status
-    const status = await this.getProfileCompletionStatus(teacherId)
-
-    if (!status.canSubmitForReview) {
-      throw new AppError(400, 'Please complete all required profile sections before submitting for review', 'PROFILE_INCOMPLETE')
-    }
-
-    if (status.profileStatus === 'pending_review') {
-      throw new AppError(400, 'Your profile is already pending review', 'ALREADY_PENDING')
-    }
-
-    if (status.profileStatus === 'approved') {
-      throw new AppError(400, 'Your profile is already approved', 'ALREADY_APPROVED')
-    }
-
-    // Update profile status
-    const updated = await prisma.teachers.update({
-      where: { id: teacherId },
-      data: {
-        profile_status: 'pending_review',
-        profile_submitted_at: new Date(),
-        profile_review_notes: null,
-      },
-    })
-
-    return {
-      success: true,
-      message: 'Profile submitted for review successfully',
-      profileStatus: updated.profile_status,
-      submittedAt: updated.profile_submitted_at,
     }
   }
 }

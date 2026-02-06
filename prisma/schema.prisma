@@ -750,6 +750,9 @@ model teachers {
   teacher_instruments          teacher_instruments[]
   teacher_languages            teacher_languages[]
   teacher_bank_details         teacher_bank_details?
+  teacher_section_reviews       teacher_section_reviews[]
+  notifications                notifications[]
+  teacher_specific_policies    teacher_specific_policies?
   profiles                     profiles                     @relation(fields: [id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@index([onboarding_completed])
@@ -1002,6 +1005,61 @@ enum one_time_token_type {
   @@schema("auth")
 }
 
+/// Section-level review tracking for profile & pricing
+model teacher_section_reviews {
+  id           String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  teacher_id   String         @db.Uuid
+  section      section_type
+  status       review_status  @default(draft)
+  submitted_at DateTime?      @db.Timestamptz(6)
+  reviewed_at  DateTime?      @db.Timestamptz(6)
+  reviewed_by  String?        @db.Uuid
+  notes        String?
+  created_at   DateTime       @default(now()) @db.Timestamptz(6)
+  updated_at   DateTime       @default(now()) @db.Timestamptz(6)
+  teachers     teachers       @relation(fields: [teacher_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([teacher_id, section])
+  @@index([teacher_id])
+  @@index([status])
+  @@schema("public")
+}
+
+/// Teacher notifications
+model notifications {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  teacher_id  String    @db.Uuid
+  title       String
+  message     String
+  type        String    @default("info")
+  section     String?
+  is_read     Boolean   @default(false)
+  created_at  DateTime  @default(now()) @db.Timestamptz(6)
+  teachers    teachers  @relation(fields: [teacher_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([teacher_id, is_read])
+  @@index([created_at])
+  @@schema("public")
+}
+
+enum section_type {
+  profile
+  pricing
+  specific_policies
+
+  @@schema("public")
+}
+
+enum review_status {
+  draft
+  pending_review
+  approved
+  rejected
+  changes_requested
+
+  @@schema("public")
+}
+
 /// Featured teachers shown on homepage
 model featured_teachers {
   id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
@@ -1012,5 +1070,34 @@ model featured_teachers {
   created_by   String?   @db.Uuid
 
   @@index([display_order])
+  @@schema("public")
+}
+
+/// Teacher-specific policies (editable by teacher, reviewed by admin)
+model teacher_specific_policies {
+  id                      String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  teacher_id              String        @unique @db.Uuid
+
+  /// Rescheduling & cancellation limits
+  reschedule_limit        Int?          // null = unlimited
+  cancellation_limit      Int?          // null = unlimited
+  advance_notice_hours    Int           @default(24)
+
+  /// No-show threshold
+  noshow_threshold_mins   Int           @default(10)
+
+  /// Fee structure stored as JSON array of { instrument, level, mode, location, price_per_hour }
+  fee_structure           Json?         @db.Json
+
+  /// Consent & acceptance
+  media_consent           Boolean       @default(false)
+  terms_accepted          Boolean       @default(false)
+
+  created_at              DateTime      @default(now()) @db.Timestamptz(6)
+  updated_at              DateTime      @default(now()) @db.Timestamptz(6)
+
+  teachers                teachers      @relation(fields: [teacher_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([teacher_id])
   @@schema("public")
 }

@@ -251,40 +251,4 @@ export class AdminController {
     })
   }
 
-  // GET /api/v1/admin/teachers/pending-review
-  static async getTeachersPendingReview(_req: AuthRequest, res: Response): Promise<void> {
-    const teachers = await AdminService.getTeachersPendingReview()
-
-    res.json({
-      success: true,
-      data: teachers,
-    })
-  }
-
-  // POST /api/v1/admin/teachers/:id/review
-  static async reviewTeacherProfile(req: AuthRequest, res: Response): Promise<void> {
-    const { id } = req.params
-    const { action, notes } = req.body
-
-    if (!action || !['approve', 'reject', 'request_changes'].includes(action)) {
-      res.status(400).json({
-        success: false,
-        error: 'Invalid action. Must be one of: approve, reject, request_changes',
-      })
-      return
-    }
-
-    const result = await AdminService.reviewTeacherProfile(
-      req.user!.id,
-      id,
-      action,
-      notes
-    )
-
-    res.json({
-      success: true,
-      data: result,
-      message: `Teacher profile ${action === 'approve' ? 'approved' : action === 'reject' ? 'rejected' : 'changes requested'} successfully`,
-    })
-  }
 }

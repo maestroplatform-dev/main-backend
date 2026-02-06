@@ -198,14 +198,4 @@ export class TeacherController {
       data: result,
     })
   }
-
-  // POST /api/v1/teachers/submit-for-review
-  static async submitProfileForReview(req: AuthRequest, res: Response) {
-    const result = await TeacherService.submitProfileForReview(req.user!.id)
-
-    res.json({
-      success: true,
-      data: result,
-    })
-  }
 }

@@ -2,6 +2,9 @@ import { Router } from 'express'
 import { TeacherController } from '../controllers/teacher.controller'
 import { TeacherOnboardingController } from '../controllers/teacher-onboarding.controller'
 import { TeacherAvailabilityController } from '../controllers/teacher-availability.controller'
+import { SectionReviewController } from '../controllers/section-review.controller'
+import { SpecificPoliciesController } from '../controllers/specific-policies.controller'
+import { NotificationController } from '../controllers/notification.controller'
 import { bookingController } from '../controllers/booking.controller'
 import { authenticateUser, requireRole } from '../middleware/auth'
 import { asyncHandler } from '../utils/asyncHandler'
@@ -130,11 +133,84 @@ router.get(
   asyncHandler(TeacherController.getProfileCompletionStatus)
 )
 
-router.post(
-  '/submit-for-review',
+// Section review routes
+router.get(
+  '/section-reviews',
   authenticateUser,
   requireRole('teacher'),
-  asyncHandler(TeacherController.submitProfileForReview)
+  asyncHandler(SectionReviewController.getAllStatuses)
+)
+
+router.get(
+  '/section-reviews/:section',
+  authenticateUser,
+  requireRole('teacher'),
+  asyncHandler(SectionReviewController.getSectionStatus)
+)
+
+router.post(
+  '/section-reviews/:section/submit',
+  authenticateUser,
+  requireRole('teacher'),
+  asyncHandler(SectionReviewController.submitForReview)
+)
+
+// Specific policies routes
+router.get(
+  '/specific-policies',
+  authenticateUser,
+  requireRole('teacher'),
+  asyncHandler(SpecificPoliciesController.getSpecificPolicies)
+)
+
+router.put(
+  '/specific-policies',
+  authenticateUser,
+  requireRole('teacher'),
+  asyncHandler(SpecificPoliciesController.saveSpecificPolicies)
+)
+
+router.post(
+  '/specific-policies/submit',
+  authenticateUser,
+  requireRole('teacher'),
+  asyncHandler(SpecificPoliciesController.submitForReview)
+)
+
+router.get(
+  '/specific-policies/review-status',
+  authenticateUser,
+  requireRole('teacher'),
+  asyncHandler(SpecificPoliciesController.getReviewStatus)
+)
+
+// Notification routes
+router.get(
+  '/notifications',
+  authenticateUser,
+  requireRole('teacher'),
+  asyncHandler(NotificationController.getNotifications)
+)
+
+router.get(
+  '/notifications/unread-count',
+  authenticateUser,
+  requireRole('teacher'),
+  asyncHandler(NotificationController.getUnreadCount)
+)
+
+router.patch(
+  '/notifications/read-all',
+  authenticateUser,
+  requireRole('teacher'),
+  asyncHandler(NotificationController.markAllAsRead)
+)
+
+router.patch(
+  '/notifications/:id/read',
+  authenticateUser,
+  requireRole('teacher'),
+  asyncHandler(NotificationController.markAsRead)
 )
 
 // ============================================================

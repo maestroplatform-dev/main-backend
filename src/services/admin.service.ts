@@ -182,6 +182,7 @@ export class AdminService {
       completedBookings,
       totalRevenue,
       recentSignups,
+      pendingSectionReviews,
     ] = await Promise.all([
       // Total users
       prisma.profiles.count(),
@@ -223,6 +224,11 @@ export class AdminService {
           }
         }
       }),
+
+      // Pending section reviews
+      prisma.teacher_section_reviews.count({
+        where: { status: 'pending_review' }
+      }),
     ])
 
     return {
@@ -249,6 +255,9 @@ export class AdminService {
       },
       revenue: {
         total: totalRevenue._sum.amount || 0,
+      },
+      sectionReviews: {
+        pending: pendingSectionReviews,
       },
     }
   }
@@ -456,6 +465,57 @@ export class AdminService {
               teacher_instrument_tiers: true,
             }
           },
+          teacher_section_reviews: {
+            select: {
+              id: true,
+              section: true,
+              status: true,
+              submitted_at: true,
+              reviewed_at: true,
+              reviewed_by: true,
+              notes: true,
+            }
+          },
+          teacher_specific_policies: {
+            select: {
+              reschedule_limit: true,
+              cancellation_limit: true,
+              advance_notice_hours: true,
+              noshow_threshold_mins: true,
+              fee_structure: true,
+              media_consent: true,
+              terms_accepted: true,
+              updated_at: true,
+            }
+          },
+          teacher_availability: {
+            select: {
+              id: true,
+              day_of_week: true,
+              start_time: true,
+              end_time: true,
+              is_recurring: true,
+              specific_date: true,
+              is_unavailable: true,
+            },
+            orderBy: [
+              { day_of_week: 'asc' },
+              { start_time: 'asc' },
+            ],
+          },
+          teacher_bank_details: {
+            select: {
+              id: true,
+              bank_name: true,
+              account_holder_name: true,
+              account_number: true,
+              gst_number: true,
+              ifsc_code: true,
+              verified: true,
+              created_at: true,
+              updated_at: true,
+            }
+          },
           reviews: {
             select: {
               id: true,
@@ -594,6 +654,10 @@ export class AdminService {
         formats: teacher.teacher_formats || null,
         starting_price: minPrice,
         starting_price_inr: teacher.starting_price_inr ?? null,
+        section_reviews: teacher.teacher_section_reviews || [],
+        specific_policies: teacher.teacher_specific_policies || null,
+        availability: teacher.teacher_availability || [],
+        bank_details: teacher.teacher_bank_details || null,
       };
       // console.log('Teacher Details:', JSON.stringify(details, null, 2));
       return details;
@@ -762,90 +826,4 @@ export class AdminService {
     }
   }
 
-  // Get all teachers pending review
-  static async getTeachersPendingReview() {
-    const teachers = await prisma.teachers.findMany({
-      where: { profile_status: 'pending_review' },
-      include: {
-        profiles: {
-          include: {
-            users: true,
-          },
-        },
-        teacher_instruments: {
-          include: {
-            teacher_instrument_tiers: true,
-          },
-        },
-        teacher_bank_details: true,
-      },
-      orderBy: { profile_submitted_at: 'asc' },
-    })
-
-    return teachers.map(t => ({
-      id: t.id,
-      name: t.name || t.profiles?.name,
-      email: t.profiles?.users?.email,
-      profilePicture: t.profile_picture,
-      submittedAt: t.profile_submitted_at,
-      instrumentCount: t.teacher_instruments.length,
-      hasBankDetails: !!t.teacher_bank_details,
-    }))
-  }
-
-  // Approve or reject teacher profile
-  static async reviewTeacherProfile(
-    adminId: string,
-    teacherId: string,
-    action: 'approve' | 'reject' | 'request_changes',
-    notes?: string
-  ) {
-    const teacher = await prisma.teachers.findUnique({
-      where: { id: teacherId },
-    })
-
-    if (!teacher) {
-      throw new AppError(404, 'Teacher not found', 'TEACHER_NOT_FOUND')
-    }
-
-    if (teacher.profile_status !== 'pending_review') {
-      throw new AppError(400, 'Teacher profile is not pending review', 'NOT_PENDING_REVIEW')
-    }
-
-    let newStatus: 'approved' | 'rejected' | 'changes_requested'
-    switch (action) {
-      case 'approve':
-        newStatus = 'approved'
-        break
-      case 'reject':
-        newStatus = 'rejected'
-        break
-      case 'request_changes':
-        newStatus = 'changes_requested'
-        break
-      default:
-        throw new AppError(400, 'Invalid action', 'INVALID_ACTION')
-    }
-
-    const updated = await prisma.teachers.update({
-      where: { id: teacherId },
-      data: {
-        profile_status: newStatus,
-        profile_reviewed_at: new Date(),
-        profile_review_notes: notes || null,
-        // If approved, also verify the teacher
-        ...(newStatus === 'approved' ? { verified: true } : {}),
-      },
-    })
-
-    // TODO: Send email notification to teacher about the review result
-
-    return {
-      success: true,
-      teacherId,
-      newStatus: updated.profile_status,
-      reviewedAt: updated.profile_reviewed_at,
-      notes: updated.profile_review_notes,
-    }
-  }
 }

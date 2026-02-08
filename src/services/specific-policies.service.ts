@@ -2,11 +2,6 @@ import prisma from '../config/database'
 import { AppError } from '../types'
 
 export interface SpecificPoliciesInput {
-  reschedule_limit: number | null
-  cancellation_limit: number | null
-  advance_notice_hours: number
-  noshow_threshold_mins: number
-  fee_structure: any[]
   media_consent: boolean
   terms_accepted: boolean
 }
@@ -22,64 +17,42 @@ export class SpecificPoliciesService {
 
     if (!policies) {
       return {
-        reschedule_limit: null,
-        cancellation_limit: null,
-        advance_notice_hours: 24,
-        noshow_threshold_mins: 10,
-        fee_structure: [],
         media_consent: false,
         terms_accepted: false,
       }
     }
 
     return {
-      reschedule_limit: policies.reschedule_limit,
-      cancellation_limit: policies.cancellation_limit,
-      advance_notice_hours: policies.advance_notice_hours,
-      noshow_threshold_mins: policies.noshow_threshold_mins,
-      fee_structure: (policies.fee_structure as any[]) || [],
       media_consent: policies.media_consent,
       terms_accepted: policies.terms_accepted,
     }
   }
 
   /**
-   * Save/update a teacher's specific policies
+   * Save/update a teacher's consent and acceptance
    */
   static async saveSpecificPolicies(teacherId: string, data: SpecificPoliciesInput) {
     const policies = await prisma.teacher_specific_policies.upsert({
       where: { teacher_id: teacherId },
       update: {
-        reschedule_limit: data.reschedule_limit,
-        cancellation_limit: data.cancellation_limit,
-        advance_notice_hours: data.advance_notice_hours,
-        noshow_threshold_mins: data.noshow_threshold_mins,
-        fee_structure: data.fee_structure as any,
         media_consent: data.media_consent,
         terms_accepted: data.terms_accepted,
         updated_at: new Date(),
       },
       create: {
         teacher_id: teacherId,
-        reschedule_limit: data.reschedule_limit,
-        cancellation_limit: data.cancellation_limit,
-        advance_notice_hours: data.advance_notice_hours,
-        noshow_threshold_mins: data.noshow_threshold_mins,
-        fee_structure: data.fee_structure as any,
         media_consent: data.media_consent,
         terms_accepted: data.terms_accepted,
+        // Set default values for other required fields
+        reschedule_limit: null,
+        cancellation_limit: null,
+        advance_notice_hours: 24,
+        noshow_threshold_mins: 10,
+        fee_structure: [],
       },
     })
 
-    // Void previous approval for specific_policies section when data changes
-    await this.voidSpecificPoliciesApproval(teacherId)
-
     return {
-      reschedule_limit: policies.reschedule_limit,
-      cancellation_limit: policies.cancellation_limit,
-      advance_notice_hours: policies.advance_notice_hours,
-      noshow_threshold_mins: policies.noshow_threshold_mins,
-      fee_structure: (policies.fee_structure as any[]) || [],
       media_consent: policies.media_consent,
       terms_accepted: policies.terms_accepted,
     }

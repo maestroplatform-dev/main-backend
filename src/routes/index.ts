@@ -9,6 +9,8 @@ import adminRoutes from './admin.routes'
 import bookingRoutes from './booking.routes'
 import paymentRoutes from './payment.routes'
 import featuredTeachersRoutes from './featured-teachers.routes'
+import conversationRoutes from './conversation.routes'
+import supportRoutes from './support.routes'
 import { authenticateUser } from '../middleware/auth'
 
 const router = Router()
@@ -29,5 +31,7 @@ router.use('/api/v1/admin', adminRoutes)
 router.use('/api/v1/bookings', bookingRoutes)
 router.use('/api/v1/payments', paymentRoutes)
 router.use('/api/v1/featured-teachers', featuredTeachersRoutes)
+router.use('/api/v1/conversations', conversationRoutes)
+router.use('/api/v1/support', supportRoutes)
 
 export default router

@@ -2,6 +2,7 @@
 import dotenv from 'dotenv'
 dotenv.config()
 
+import { createServer } from 'http'
 import express, { Application } from 'express'
 import cors from 'cors'
 import helmet from 'helmet'
@@ -10,8 +11,10 @@ import routes from './routes'
 import { errorHandler, notFoundHandler } from './middleware/errorHandler'
 import { apiLimiter } from './middleware/rateLimiter'
 import requestLogger from './middleware/requestLogger'
+import { initSocketServer } from './socket'
 
 const app: Application = express()
+const httpServer = createServer(app)
 const PORT = process.env.PORT || 4000
 
 // Security middleware
@@ -40,6 +43,7 @@ app.use(
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'x-admin-secret'],
+    maxAge: 86400, // Cache preflight for 24h to reduce OPTIONS requests
   })
 )
 
@@ -47,8 +51,11 @@ app.use(
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true, limit: '10mb' }))
 
-// Rate limiting
-app.use(apiLimiter)
+// Rate limiting (skip for conversation routes — they have their own chatPollingLimiter)
+app.use((req, res, next) => {
+  if (req.path.startsWith('/api/v1/conversations')) return next()
+  return apiLimiter(req, res, next)
+})
 
 // Request logging (structured)
 app.use(requestLogger)
@@ -60,14 +67,18 @@ app.use(routes)
 app.use(notFoundHandler)
 app.use(errorHandler)
 
+// Initialise Socket.IO on the shared HTTP server
+initSocketServer(httpServer, allowedOrigins)
+
 // Start server
-const server = app.listen(PORT, () => {
+const server = httpServer.listen(PORT, () => {
   console.log('\n' + '='.repeat(60))
   console.log('🎵  MAESTRA BACKEND API')
   console.log('='.repeat(60))
   console.log(`\n✅  Server running on: http://localhost:${PORT}`)
   console.log(`📝  Environment: ${process.env.NODE_ENV || 'development'}`)
   console.log(`🌐  CORS enabled for: ${allowedOrigins.length} origins`)
+  console.log(`⚡  Socket.IO WebSocket server active`)
   console.log(`⏰  Started at: ${new Date().toLocaleString()}`)
   console.log('\n' + '='.repeat(60))
   console.log('📡  Endpoints:')

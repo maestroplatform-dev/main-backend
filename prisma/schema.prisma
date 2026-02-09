@@ -621,10 +621,12 @@ model students {
   signup_method       String               @default("email")
   updated_at          DateTime?            @default(now()) @db.Timestamptz(6)
   bookings            bookings[]
+  conversations       conversations[]
   package_card_override student_package_card_overrides?
   purchased_packages  purchased_packages[]
   reviews             reviews[]
   preferences         student_preferences?
+  support_tickets     support_tickets[]
   profiles            profiles             @relation(fields: [id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@schema("public")
@@ -741,6 +743,7 @@ model teachers {
   profile_review_notes         String?
   bookings                     bookings[]
   class_packages               class_packages[]
+  conversations                conversations[]
   purchased_packages           purchased_packages[]
   package_scheduled_sessions   package_scheduled_sessions[]
   reviews                      reviews[]
@@ -1099,5 +1102,93 @@ model teacher_specific_policies {
   teachers                teachers      @relation(fields: [teacher_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@index([teacher_id])
+  @@schema("public")
+}
+
+/// Chat conversations between students and teachers
+model conversations {
+  id                    String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  student_id            String    @db.Uuid
+  teacher_id            String    @db.Uuid
+
+  /// Timestamp of most recent message (for sorting)
+  last_message_at       DateTime? @db.Timestamptz(6)
+
+  /// Preview of last message
+  last_message_preview  String?
+
+  /// Unread counts per side
+  student_unread_count  Int       @default(0)
+  teacher_unread_count  Int       @default(0)
+
+  created_at            DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at            DateTime  @default(now()) @db.Timestamptz(6)
+
+  students              students  @relation(fields: [student_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  teachers              teachers  @relation(fields: [teacher_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  messages              messages[]
+
+  @@unique([student_id, teacher_id])
+  @@index([student_id])
+  @@index([teacher_id])
+  @@index([last_message_at(sort: Desc)])
+  @@schema("public")
+}
+
+/// Individual chat messages
+model messages {
+  id                String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  conversation_id   String        @db.Uuid
+  sender_id         String        @db.Uuid
+  sender_type       sender_type
+
+  /// Text content
+  content           String
+
+  /// Whether message has been read by recipient
+  is_read           Boolean       @default(false)
+
+  created_at        DateTime      @default(now()) @db.Timestamptz(6)
+
+  conversations     conversations @relation(fields: [conversation_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([conversation_id, created_at])
+  @@index([sender_id])
+  @@schema("public")
+}
+
+enum sender_type {
+  student
+  teacher
+
+  @@schema("public")
+}
+
+enum support_ticket_status {
+  open
+  in_progress
+  resolved
+  closed
+
+  @@schema("public")
+}
+
+/// Learner support tickets submitted by students
+model support_tickets {
+  id          String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  student_id  String                @db.Uuid
+  subject     String
+  message     String
+  status      support_ticket_status @default(open)
+  admin_notes String?
+
+  created_at  DateTime              @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime              @default(now()) @db.Timestamptz(6)
+
+  students    students              @relation(fields: [student_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([student_id])
+  @@index([status])
+  @@index([created_at(sort: Desc)])
   @@schema("public")
 }

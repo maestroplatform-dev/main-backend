@@ -25,3 +25,20 @@ export const authLimiter = rateLimit({
     },
   },
 })
+
+// More lenient rate limit for real-time chat polling
+// Allows ~100 requests per minute (every 600ms)
+export const chatPollingLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute window
+  max: 100, // 100 requests per minute
+  message: {
+    success: false,
+    error: {
+      message: 'Too many requests, please try again later',
+      code: 'RATE_LIMIT_EXCEEDED',
+    },
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+})
+

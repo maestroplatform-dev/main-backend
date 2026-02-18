@@ -3,6 +3,7 @@ import { nanoid } from 'nanoid';
 import { getRazorpayInstance } from '../config/razorpay';
 import prisma from '../config/database';
 import { payment_status, purchase_status, payment_option_type } from '@prisma/client';
+import { computeTotalPrice, computePerClassPrice, buildPricingConfig } from '../utils/pricing';
 
 // Types
 interface SelectedSlot {
@@ -174,10 +175,67 @@ export class PaymentService {
       throw new Error('Student not found');
     }
 
-    // Calculate pricing
-    const totalPackagePrice = Number(classPackage.price);
+    // Calculate pricing using the formula (server-side validation)
+    // Look up the teacher's base price for the selected instrument + level
+    // teach_or_perform may be 'teach' or 'Teach' (case inconsistency in data)
+    const teacherInstrument = await prisma.teacher_instruments.findFirst({
+      where: {
+        teacher_id,
+        instrument,
+        teach_or_perform: { in: ['teach', 'Teach'] },
+      },
+      include: {
+        teacher_instrument_tiers: {
+          where: { level: level as any },
+        },
+      },
+    }) as any;
+
     const classesCount = classPackage.classes_count;
-    const pricePerSession = totalPackagePrice / classesCount;
+
+    // Compute price from formula if instrument/level tier is found
+    let totalPackagePrice: number;
+    let pricePerSession: number;
+
+    if (teacherInstrument?.teacher_instrument_tiers?.[0]) {
+      const tier = teacherInstrument.teacher_instrument_tiers[0];
+      const teacherBasePrice = tier.price_inr != null
+        ? (typeof tier.price_inr === 'object' && typeof tier.price_inr.toNumber === 'function'
+          ? tier.price_inr.toNumber()
+          : Number(tier.price_inr))
+        : null;
+
+      if (teacherBasePrice && teacherBasePrice > 0) {
+        // Fetch teacher's custom markup config
+        const teacher = await prisma.teachers.findUnique({
+          where: { id: teacher_id },
+          select: {
+            custom_markup_pct_single: true,
+            custom_markup_pct_10: true,
+            custom_markup_pct_20: true,
+            custom_markup_pct_30: true,
+            custom_rounding_single: true,
+            custom_rounding_10: true,
+            custom_rounding_20: true,
+            custom_rounding_30: true,
+          },
+        }) as any;
+
+        const pricingConfig = teacher ? buildPricingConfig(teacher) : null;
+
+        pricePerSession = computePerClassPrice(teacherBasePrice, classesCount, pricingConfig ?? undefined);
+        totalPackagePrice = pricePerSession * classesCount;
+      } else {
+        // Fallback to class_packages.price
+        totalPackagePrice = Number(classPackage.price);
+        pricePerSession = totalPackagePrice / classesCount;
+      }
+    } else {
+      // Fallback to class_packages.price
+      totalPackagePrice = Number(classPackage.price);
+      pricePerSession = totalPackagePrice / classesCount;
+    }
+
     const amountToPay = pricePerSession * sessions_to_pay;
     const amountInPaisa = Math.round(amountToPay * 100); // Razorpay expects amount in paisa
 

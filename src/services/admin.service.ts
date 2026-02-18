@@ -7,6 +7,7 @@ import { z } from 'zod'
 import { teacherCompleteOnboardingSchema } from '../utils/validation'
 import { Resend } from 'resend'
 import logger from '../utils/logger'
+import { buildPricingConfig, computeStartingPrice } from '../utils/pricing'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 
@@ -343,7 +344,8 @@ export class AdminService {
         ? teacher.reviews.reduce((sum: number, r: any) => sum + r.rating, 0) / teacher.reviews.length
         : 0;
 
-      // Find minimum price from all teacher_instrument_tiers
+      // Find minimum student-facing starting price using formula (30-session tier)
+      const teacherPricingConfig = buildPricingConfig(teacher);
       let minPrice: number | null = null;
       if (teacher.teacher_instruments && teacher.teacher_instruments.length > 0) {
         teacher.teacher_instruments.forEach((inst: any) => {
@@ -352,17 +354,13 @@ export class AdminService {
               const price = tier.price_inr && typeof tier.price_inr === 'object' && typeof tier.price_inr.toNumber === 'function'
                 ? tier.price_inr.toNumber()
                 : typeof tier.price_inr === 'number' ? tier.price_inr : null;
-              if (price !== null && (minPrice === null || price < minPrice)) {
-                minPrice = price;
+              if (price !== null && price > 0) {
+                const perClass30 = computeStartingPrice(price, teacherPricingConfig ?? undefined);
+                if (minPrice === null || perClass30 < minPrice) {
+                  minPrice = perClass30;
+                }
               }
             });
-          }
-          // fallback to base_price if no tiers
-          const basePrice = inst.base_price && typeof inst.base_price === 'object' && typeof inst.base_price.toNumber === 'function'
-            ? inst.base_price.toNumber()
-            : typeof inst.base_price === 'number' ? inst.base_price : null;
-          if (basePrice !== null && (minPrice === null || basePrice < minPrice)) {
-            minPrice = basePrice;
           }
         });
       }
@@ -573,7 +571,8 @@ export class AdminService {
         ? teacher.reviews.reduce((sum: number, r: any) => sum + r.rating, 0) / teacher.reviews.length
         : 0
 
-      // Find minimum price from all teacher_instrument_tiers
+      // Find minimum student-facing starting price using formula (30-session tier)
+      const pricingConfig = buildPricingConfig(teacher);
       let minPrice: number | null = null;
       if (teacher.teacher_instruments && teacher.teacher_instruments.length > 0) {
         teacher.teacher_instruments.forEach((inst: any) => {
@@ -582,17 +581,13 @@ export class AdminService {
               const price = tier.price_inr && typeof tier.price_inr === 'object' && typeof tier.price_inr.toNumber === 'function'
                 ? tier.price_inr.toNumber()
                 : typeof tier.price_inr === 'number' ? tier.price_inr : null;
-              if (price !== null && (minPrice === null || price < minPrice)) {
-                minPrice = price;
+              if (price !== null && price > 0) {
+                const perClass30 = computeStartingPrice(price, pricingConfig ?? undefined);
+                if (minPrice === null || perClass30 < minPrice) {
+                  minPrice = perClass30;
+                }
               }
             });
-          }
-          // fallback to base_price if no tiers
-          const basePrice = inst.base_price && typeof inst.base_price === 'object' && typeof inst.base_price.toNumber === 'function'
-            ? inst.base_price.toNumber()
-            : typeof inst.base_price === 'number' ? inst.base_price : null;
-          if (basePrice !== null && (minPrice === null || basePrice < minPrice)) {
-            minPrice = basePrice;
           }
         });
       }
@@ -654,6 +649,7 @@ export class AdminService {
         formats: teacher.teacher_formats || null,
         starting_price: minPrice,
         starting_price_inr: teacher.starting_price_inr ?? null,
+        pricing_config: buildPricingConfig(teacher),
         section_reviews: teacher.teacher_section_reviews || [],
         specific_policies: teacher.teacher_specific_policies || null,
         availability: teacher.teacher_availability || [],

@@ -709,6 +709,22 @@ model teachers {
   teaching_style               String?
   youtube_links                String[]                     @default([])
   starting_price_inr           Decimal?                     @db.Decimal(10, 2)
+  /// Admin-configurable markup % for single/1:1 sessions (null = default 20%)
+  custom_markup_pct_single     Decimal?                     @db.Decimal(5, 2)
+  /// Admin-configurable markup % for 10-session packages (null = default 15%)
+  custom_markup_pct_10         Decimal?                     @db.Decimal(5, 2)
+  /// Admin-configurable markup % for 20-session packages (null = default 10%)
+  custom_markup_pct_20         Decimal?                     @db.Decimal(5, 2)
+  /// Admin-configurable markup % for 30-session packages (null = default 5%)
+  custom_markup_pct_30         Decimal?                     @db.Decimal(5, 2)
+  /// Admin-configurable rounding multiple for 1:1 prices (null = default 25)
+  custom_rounding_single       Int?
+  /// Admin-configurable rounding multiple for 10-session packages (null = default 50)
+  custom_rounding_10           Int?
+  /// Admin-configurable rounding multiple for 20-session packages (null = default 50)
+  custom_rounding_20           Int?
+  /// Admin-configurable rounding multiple for 30-session packages (null = default 50)
+  custom_rounding_30           Int?
   profile_review_notes         String?
   profile_reviewed_at          DateTime?                    @db.Timestamptz(6)
   profile_status               profile_status               @default(draft)

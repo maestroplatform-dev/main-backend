@@ -220,6 +220,16 @@ export const teacherCompleteOnboardingSchema = z.object({
 
   open_to_international: z.boolean().default(false),
   international_premium: z.number().nonnegative().default(0),
+
+  // Admin-configurable pricing markup overrides (null = use platform defaults)
+  custom_markup_pct_single: z.number().nonnegative().nullable().optional(),
+  custom_markup_pct_10: z.number().nonnegative().nullable().optional(),
+  custom_markup_pct_20: z.number().nonnegative().nullable().optional(),
+  custom_markup_pct_30: z.number().nonnegative().nullable().optional(),
+  custom_rounding_single: z.number().int().positive().nullable().optional(),
+  custom_rounding_10: z.number().int().positive().nullable().optional(),
+  custom_rounding_20: z.number().int().positive().nullable().optional(),
+  custom_rounding_30: z.number().int().positive().nullable().optional(),
 })
 
 // Old schemas (kept for compatibility)
@@ -243,6 +253,10 @@ export const teacherProfileUpdateSchema = z.object({
   location: z.string().min(2).optional(),
   timezone: z.string().optional(),
   
+  // International pricing
+  open_to_international: z.boolean().optional(),
+  international_premium: z.number().nonnegative().optional(),
+
   // New comprehensive profile fields
   name: z.string().min(1).max(120).optional(),
   phone: z.string().regex(/^\d{10}$/, 'Phone must be 10 digits').optional(),

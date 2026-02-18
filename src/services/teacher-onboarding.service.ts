@@ -1,6 +1,7 @@
 import prisma from '../config/database'
 import { AppError } from '../types'
 import type { TeacherCompleteOnboardingInput } from '../utils/validation'
+import { computeTotalPrice, buildPricingConfig } from '../utils/pricing'
 
 export class TeacherOnboardingService {
   // Complete onboarding 
@@ -39,6 +40,15 @@ export class TeacherOnboardingService {
             starting_price_inr: data.starting_price_inr ?? null,
             open_to_international: data.open_to_international,
             international_premium: data.open_to_international ? data.international_premium : 0,
+            // Admin-configurable pricing markup overrides
+            custom_markup_pct_single: data.custom_markup_pct_single ?? null,
+            custom_markup_pct_10: data.custom_markup_pct_10 ?? null,
+            custom_markup_pct_20: data.custom_markup_pct_20 ?? null,
+            custom_markup_pct_30: data.custom_markup_pct_30 ?? null,
+            custom_rounding_single: data.custom_rounding_single ?? null,
+            custom_rounding_10: data.custom_rounding_10 ?? null,
+            custom_rounding_20: data.custom_rounding_20 ?? null,
+            custom_rounding_30: data.custom_rounding_30 ?? null,
             onboarding_completed: true,
           },
         } as any)
@@ -188,7 +198,19 @@ export class TeacherOnboardingService {
             if (beginnerTier && beginnerTier.price_inr) {
               const basePrice = beginnerTier.price_inr
 
-              // Create 3 standard packages
+              // Build pricing config from teacher's custom markup overrides
+              const pricingConfig = buildPricingConfig({
+                custom_markup_pct_single: data.custom_markup_pct_single,
+                custom_markup_pct_10: data.custom_markup_pct_10,
+                custom_markup_pct_20: data.custom_markup_pct_20,
+                custom_markup_pct_30: data.custom_markup_pct_30,
+                custom_rounding_single: data.custom_rounding_single,
+                custom_rounding_10: data.custom_rounding_10,
+                custom_rounding_20: data.custom_rounding_20,
+                custom_rounding_30: data.custom_rounding_30,
+              })
+
+              // Create 3 standard packages with marked-up prices
               const packagesToCreate = [
                 {
                   teacher_id: teacherId,
@@ -196,7 +218,7 @@ export class TeacherOnboardingService {
                   description: 'Perfect for beginners to get started',
                   classes_count: 10,
                   validity_days: 90,
-                  price: basePrice * 10,
+                  price: computeTotalPrice(basePrice, 10, pricingConfig ?? undefined),
                   is_active: true
                 },
                 {
@@ -205,7 +227,7 @@ export class TeacherOnboardingService {
                   description: 'Most popular choice for consistent learning',
                   classes_count: 20,
                   validity_days: 120,
-                  price: basePrice * 20,
+                  price: computeTotalPrice(basePrice, 20, pricingConfig ?? undefined),
                   is_active: true
                 },
                 {
@@ -214,7 +236,7 @@ export class TeacherOnboardingService {
                   description: 'Best value for committed learners',
                   classes_count: 30,
                   validity_days: 180,
-                  price: basePrice * 30,
+                  price: computeTotalPrice(basePrice, 30, pricingConfig ?? undefined),
                   is_active: true
                 }
               ]

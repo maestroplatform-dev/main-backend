@@ -2,6 +2,7 @@ import prisma from '../config/database'
 import { AppError } from '../types'
 import { TeacherOnboardingInput, TeacherProfileUpdateInput } from '../utils/validation'
 import { SectionReviewService } from './section-review.service'
+import { computeStartingPrice, buildPricingConfig } from '../utils/pricing'
 
 export class TeacherService {
   // Complete teacher onboarding
@@ -90,47 +91,41 @@ export class TeacherService {
       return out
     }
 
-    // Compute minimum student-facing starting price from all instruments and tiers
+    // ── Pricing config (admin-overridable per teacher) ───────────────────
+    const toNum = (raw: any): number | null => {
+      if (raw === null || raw === undefined) return null
+      if (typeof raw === 'object' && typeof raw.toNumber === 'function') return raw.toNumber()
+      if (typeof raw === 'number') return raw
+      const n = Number(raw)
+      return Number.isNaN(n) ? null : n
+    }
+
+    // Default multiplier percentages
+    const pricingConfig = buildPricingConfig(teacher)
+
+    // Compute minimum student-facing starting price using new formula
+    // Starting price = lowest per-class price across all tiers at the 30-session level
     let minPrice: number | null = null
     if (teacher.teacher_instruments && teacher.teacher_instruments.length > 0) {
       teacher.teacher_instruments.forEach((inst: any) => {
         if (inst.teacher_instrument_tiers && inst.teacher_instrument_tiers.length > 0) {
           inst.teacher_instrument_tiers.forEach((tier: any) => {
-            const raw = tier.price_inr
-            const teacherPrice = raw && typeof raw === 'object' && typeof raw.toNumber === 'function'
-              ? raw.toNumber()
-              : typeof raw === 'number'
-                ? raw
-                : null
+            const teacherBasePrice = toNum(tier.price_inr)
 
-            const rawMarkup = tier.platform_markup_inr
-            const markup = rawMarkup && typeof rawMarkup === 'object' && typeof rawMarkup.toNumber === 'function'
-              ? rawMarkup.toNumber()
-              : typeof rawMarkup === 'number'
-                ? rawMarkup
-                : 0
+            if (teacherBasePrice !== null && teacherBasePrice > 0) {
+              // Compute 30-session per-class price (lowest tier = starting price)
+              const perClass30 = computeStartingPrice(teacherBasePrice, pricingConfig ?? undefined)
 
-            const studentPrice = teacherPrice !== null ? teacherPrice + markup : null
-
-            if (studentPrice !== null && (minPrice === null || studentPrice < minPrice)) {
-              minPrice = studentPrice
+              if (minPrice === null || perClass30 < minPrice) {
+                minPrice = perClass30
+              }
             }
           })
-        }
-
-        const rawBase = inst.base_price
-        const basePrice = rawBase && typeof rawBase === 'object' && typeof rawBase.toNumber === 'function'
-          ? rawBase.toNumber()
-          : typeof rawBase === 'number'
-            ? rawBase
-            : null
-
-        if (basePrice !== null && (minPrice === null || basePrice < minPrice)) {
-          minPrice = basePrice
         }
       })
     }
 
+    // Only include pricing_config if any override is set
     return {
       ...teacher,
       teacher_instruments: teacher.teacher_instruments?.map((inst: any) => ({
@@ -138,6 +133,7 @@ export class TeacherService {
         package_card_points: normalize(inst.package_card_points),
       })) || [],
       starting_price: minPrice,
+      ...(pricingConfig ? { pricing_config: pricingConfig } : {}),
     }
   }
 
@@ -175,6 +171,8 @@ export class TeacherService {
     if (data.profile_picture !== undefined) updateData.profile_picture = data.profile_picture
     if (data.teaching_style !== undefined) updateData.teaching_style = data.teaching_style
     if (data.professional_experience !== undefined) updateData.professional_experience = data.professional_experience
+    if (data.open_to_international !== undefined) updateData.open_to_international = data.open_to_international
+    if (data.international_premium !== undefined) updateData.international_premium = data.international_premium
 
     const updated = await prisma.teachers.update({
       where: { id: teacherId },
@@ -234,43 +232,33 @@ export class TeacherService {
     })
 
     const teachersWithStartingPrice = teachers.map((teacher: any) => {
+      const toNum = (raw: any): number | null => {
+        if (raw === null || raw === undefined) return null
+        if (typeof raw === 'object' && typeof raw.toNumber === 'function') return raw.toNumber()
+        if (typeof raw === 'number') return raw
+        const n = Number(raw)
+        return Number.isNaN(n) ? null : n
+      }
+
+      const pricingConfig = buildPricingConfig(teacher)
+
       let minPrice: number | null = null
 
       if (teacher.teacher_instruments && teacher.teacher_instruments.length > 0) {
         teacher.teacher_instruments.forEach((inst: any) => {
           if (inst.teacher_instrument_tiers && inst.teacher_instrument_tiers.length > 0) {
             inst.teacher_instrument_tiers.forEach((tier: any) => {
-              const raw = tier.price_inr
-              const teacherPrice = raw && typeof raw === 'object' && typeof raw.toNumber === 'function'
-                ? raw.toNumber()
-                : typeof raw === 'number'
-                  ? raw
-                  : null
+              const teacherBasePrice = toNum(tier.price_inr)
 
-              const rawMarkup = tier.platform_markup_inr
-              const markup = rawMarkup && typeof rawMarkup === 'object' && typeof rawMarkup.toNumber === 'function'
-                ? rawMarkup.toNumber()
-                : typeof rawMarkup === 'number'
-                  ? rawMarkup
-                  : 0
+              if (teacherBasePrice !== null && teacherBasePrice > 0) {
+                // Starting price = 30-session per-class (lowest tier markup)
+                const perClass30 = computeStartingPrice(teacherBasePrice, pricingConfig ?? undefined)
 
-              const studentPrice = teacherPrice !== null ? teacherPrice + markup : null
-
-              if (studentPrice !== null && (minPrice === null || studentPrice < minPrice)) {
-                minPrice = studentPrice
+                if (minPrice === null || perClass30 < minPrice) {
+                  minPrice = perClass30
+                }
               }
             })
-          }
-
-          const rawBase = inst.base_price
-          const basePrice = rawBase && typeof rawBase === 'object' && typeof rawBase.toNumber === 'function'
-            ? rawBase.toNumber()
-            : typeof rawBase === 'number'
-              ? rawBase
-              : null
-
-          if (basePrice !== null && (minPrice === null || basePrice < minPrice)) {
-            minPrice = basePrice
           }
         })
       }
@@ -298,6 +286,7 @@ export class TeacherService {
 
       return {
         ...teacher,
+        starting_price_inr: minPrice,
         teacher_instruments: teacher.teacher_instruments?.map((inst: any) => ({
           ...inst,
           package_card_points: normalize(inst.package_card_points),
@@ -411,14 +400,18 @@ export class TeacherService {
 
     // Create tiers if provided
     if (data.tiers && data.tiers.length > 0) {
+      // Use teacher's profile-level international settings
+      const isIntl = teacher.open_to_international
+      const intlPremium = Number(teacher.international_premium) || 0
+
       await prisma.teacher_instrument_tiers.createMany({
         data: data.tiers.map(tier => ({
           teacher_instrument_id: instrument.id,
           level: tier.level as any,
           mode: tier.mode as any,
           price_inr: tier.price_inr,
-          price_foreign: data.open_to_international && data.international_premium 
-            ? tier.price_inr * (1 + data.international_premium / 100) 
+          price_foreign: isIntl && intlPremium
+            ? tier.price_inr + intlPremium
             : null,
         })),
       })
@@ -476,6 +469,14 @@ export class TeacherService {
 
     // Update tiers if provided
     if (data.tiers) {
+      // Look up teacher's profile-level international settings
+      const teacher = await prisma.teachers.findUnique({
+        where: { id: teacherId },
+        select: { open_to_international: true, international_premium: true },
+      })
+      const isIntl = teacher?.open_to_international
+      const intlPremium = Number(teacher?.international_premium) || 0
+
       // Delete existing tiers
       await prisma.teacher_instrument_tiers.deleteMany({
         where: { teacher_instrument_id: instrumentId },
@@ -489,8 +490,8 @@ export class TeacherService {
             level: tier.level as any,
             mode: tier.mode as any,
             price_inr: tier.price_inr,
-            price_foreign: data.open_to_international && data.international_premium
-              ? tier.price_inr * (1 + data.international_premium / 100)
+            price_foreign: isIntl && intlPremium
+              ? tier.price_inr + intlPremium
               : null,
           })),
         })

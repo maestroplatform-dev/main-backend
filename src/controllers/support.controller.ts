@@ -122,7 +122,7 @@ export class SupportController {
    * Admin: Update ticket status and/or add notes
    */
   static async updateTicket(req: AuthRequest, res: Response) {
-    const { id } = req.params
+    const id = req.params.id as string
     const { status, admin_notes } = req.body
 
     console.log('[SUPPORT] updateTicket called:', { id, status, admin_notes, body: req.body })

@@ -65,7 +65,7 @@ export class AdminController {
 
     // GET /api/v1/admin/teachers/:id - Get detailed teacher information
     static async getTeacherDetails(req: AuthRequest, res: Response): Promise<void> {
-      const { id } = req.params
+      const id = req.params.id as string
       const teacher = await AdminService.getTeacherDetails(id)
     
       res.json({
@@ -76,7 +76,7 @@ export class AdminController {
 
   // PATCH /api/v1/admin/teachers/:id/verify - Verify/Unverify teacher
   static async updateTeacherVerification(req: AuthRequest, res: Response): Promise<void> {
-    const { id } = req.params
+    const id = req.params.id as string
     const { verified } = req.body
     
     const teacher = await AdminService.updateTeacherVerification(id, verified)
@@ -90,7 +90,7 @@ export class AdminController {
 
   // GET /api/v1/admin/teachers/:id/onboarding - Get full onboarding-style data for a teacher
   static async getTeacherOnboardingData(req: AuthRequest, res: Response): Promise<void> {
-    const { id } = req.params
+    const id = req.params.id as string
 
     const data = await TeacherOnboardingService.getOnboardingData(id)
 
@@ -102,7 +102,7 @@ export class AdminController {
 
   // GET /api/v1/admin/teachers/:id/bank-details - Get teacher's banking details
   static async getTeacherBankDetails(req: AuthRequest, res: Response): Promise<void> {
-    const { id } = req.params
+    const id = req.params.id as string
 
     const bankDetails = await AdminService.getTeacherBankDetails(id)
 
@@ -114,7 +114,7 @@ export class AdminController {
 
   // PUT /api/v1/admin/teachers/:id - Update teacher details (same schema as onboarding)
   static async updateTeacherDetails(req: AuthRequest, res: Response): Promise<void> {
-    const { id } = req.params
+    const id = req.params.id as string
     
     // Allow optional name/email updates in addition to onboarding data
     const schema = teacherCompleteOnboardingSchema.extend({
@@ -182,7 +182,7 @@ export class AdminController {
 
   // PATCH /api/v1/admin/users/:id/status - Activate/Deactivate user
   static async updateUserStatus(req: AuthRequest, res: Response): Promise<void> {
-    const { id } = req.params
+    const id = req.params.id as string
     const { is_active } = req.body
     
     const user = await AdminService.updateUserStatus(id, is_active)
@@ -232,7 +232,7 @@ export class AdminController {
 
   // PUT /api/v1/admin/students/:id/package-card
   static async updateStudentPackageCard(req: AuthRequest, res: Response): Promise<void> {
-    const studentId = req.params.id
+    const studentId = req.params.id as string
     if (!studentId) {
       throw new AppError(400, 'Student ID is required', 'VALIDATION_ERROR')
     }

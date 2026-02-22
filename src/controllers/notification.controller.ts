@@ -28,7 +28,7 @@ export class NotificationController {
 
   // PATCH /api/v1/teachers/notifications/:id/read
   static async markAsRead(req: AuthRequest, res: Response) {
-    await NotificationService.markAsRead(req.user!.id, req.params.id)
+    await NotificationService.markAsRead(req.user!.id, req.params.id as string)
 
     res.json({
       success: true,

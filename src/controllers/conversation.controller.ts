@@ -64,7 +64,7 @@ export class ConversationController {
    * Get messages for a conversation (paginated)
    */
   static async getMessages(req: AuthRequest, res: Response) {
-    const { id } = req.params
+    const id = req.params.id as string
     const { cursor, limit } = req.query
     const userId = req.user!.id
     const userRole = req.user!.role
@@ -85,7 +85,7 @@ export class ConversationController {
    * Send a message in a conversation
    */
   static async sendMessage(req: AuthRequest, res: Response): Promise<void> {
-    const { id } = req.params
+    const id = req.params.id as string
     const { content } = req.body
     const userId = req.user!.id
     const userRole = req.user!.role
@@ -106,7 +106,7 @@ export class ConversationController {
    * Mark all messages in a conversation as read
    */
   static async markAsRead(req: AuthRequest, res: Response) {
-    const { id } = req.params
+    const id = req.params.id as string
     const userId = req.user!.id
     const userRole = req.user!.role
 

@@ -70,7 +70,7 @@ export class SpecificPoliciesController {
    * Admin: view a teacher's specific policies
    */
   static async adminGetTeacherPolicies(req: AuthRequest, res: Response) {
-    const { teacherId } = req.params
+    const teacherId = req.params.teacherId as string
 
     const policies = await SpecificPoliciesService.getTeacherSpecificPolicies(teacherId)
 

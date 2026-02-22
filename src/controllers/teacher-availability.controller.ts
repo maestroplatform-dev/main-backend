@@ -114,7 +114,7 @@ export class TeacherAvailabilityController {
    * Get a specific slot by ID
    */
   static async getSlot(req: AuthRequest, res: Response) {
-    const slot = await TeacherAvailabilityService.getSlot(req.params.id, req.user!.id)
+    const slot = await TeacherAvailabilityService.getSlot(req.params.id as string, req.user!.id)
 
     res.status(200).json({
       success: true,
@@ -134,7 +134,7 @@ export class TeacherAvailabilityController {
       end_time: z.string().regex(/^\d{2}:\d{2}$/).optional(),
     }).parse(req.body)
 
-    const slot = await TeacherAvailabilityService.updateSlot(req.params.id, req.user!.id, data)
+    const slot = await TeacherAvailabilityService.updateSlot(req.params.id as string, req.user!.id, data)
 
     logger.info({ userId: req.user?.id, slotId: slot.id }, '✅ Slot updated')
 
@@ -151,7 +151,7 @@ export class TeacherAvailabilityController {
   static async deleteSlot(req: AuthRequest, res: Response) {
     logger.info({ userId: req.user?.id, slotId: req.params.id }, '🔵 Deleting slot')
 
-    await TeacherAvailabilityService.deleteSlot(req.params.id, req.user!.id)
+    await TeacherAvailabilityService.deleteSlot(req.params.id as string, req.user!.id)
 
     logger.info({ userId: req.user?.id, slotId: req.params.id }, '✅ Slot deleted')
 
@@ -166,7 +166,7 @@ export class TeacherAvailabilityController {
    * Delete all slots for a specific date
    */
   static async deleteSlotsForDate(req: AuthRequest, res: Response) {
-    const { date } = req.params
+    const date = req.params.date as string
 
     logger.info({ userId: req.user?.id, date }, '🔵 Deleting slots for date')
 
@@ -203,7 +203,7 @@ export class TeacherAvailabilityController {
    * Remove unavailable marker for a date
    */
   static async removeUnavailable(req: AuthRequest, res: Response) {
-    const { date } = req.params
+    const date = req.params.date as string
 
     logger.info({ userId: req.user?.id, date }, '🔵 Removing unavailable marker')
 
@@ -264,7 +264,7 @@ export class TeacherAvailabilityController {
    * Get available booking slots for a teacher (public endpoint for students)
    */
   static async getAvailableSlots(req: AuthRequest, res: Response) {
-    const { teacherId } = req.params
+    const teacherId = req.params.teacherId as string
     const query = getAvailableSlotsSchema.parse(req.query)
 
     logger.info(
@@ -286,6 +286,23 @@ export class TeacherAvailabilityController {
         slots,
         total: slots.length,
       },
+    })
+  }
+
+  /**
+   * GET /api/v1/teachers/:teacherId/unavailable-dates
+   * Public endpoint: returns dates the teacher marked unavailable
+   */
+  static async getPublicUnavailableDates(req: AuthRequest, res: Response) {
+    const teacherId = req.params.teacherId as string
+    const startDate = req.query.startDate as string | undefined
+    const endDate = req.query.endDate as string | undefined
+
+    const dates = await TeacherAvailabilityService.getUnavailableDates(teacherId, startDate, endDate)
+
+    res.status(200).json({
+      success: true,
+      data: dates,
     })
   }
 }

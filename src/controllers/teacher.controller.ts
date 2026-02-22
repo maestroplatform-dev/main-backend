@@ -31,7 +31,7 @@ export class TeacherController {
 
   // GET /api/v1/teachers/:id (public)
   static async getTeacherById(req: Request, res: Response) {
-    const teacher = await TeacherService.getProfile(req.params.id)
+    const teacher = await TeacherService.getProfile(req.params.id as string)
 
     res.json({
       success: true,
@@ -54,16 +54,32 @@ export class TeacherController {
     })
   }
 
-  // GET /api/v1/teachers (public - list all)
+  // GET /api/v1/teachers (public - list all with search/filter/sort)
   static async getAllTeachers(req: Request, res: Response) {
     const verified = req.query.verified === 'true'
     const limit = parseInt(req.query.limit as string) || 20
     const offset = parseInt(req.query.offset as string) || 0
+    const search = (req.query.search as string) || ''
+    const instrument = (req.query.instrument as string) || ''
+    const city = (req.query.city as string) || ''
+    const level = (req.query.level as string) || ''
+    const mode = (req.query.mode as string) || ''
+    const minPrice = req.query.minPrice ? parseInt(req.query.minPrice as string) : undefined
+    const maxPrice = req.query.maxPrice ? parseInt(req.query.maxPrice as string) : undefined
+    const sortBy = (req.query.sortBy as string) || 'az'
 
-    const teachers = await TeacherService.getAllTeachers({
+    const { teachers, total } = await TeacherService.getAllTeachers({
       verified,
       limit,
       offset,
+      search: search || undefined,
+      instrument: instrument || undefined,
+      city: city || undefined,
+      level: level || undefined,
+      mode: mode || undefined,
+      minPrice,
+      maxPrice,
+      sortBy,
     })
 
     res.json({
@@ -72,7 +88,7 @@ export class TeacherController {
       meta: {
         limit,
         offset,
-        count: teachers.length,
+        total,
       },
     })
   }
@@ -156,7 +172,7 @@ export class TeacherController {
 
   // PUT /api/v1/teachers/instruments/:id
   static async updateInstrument(req: AuthRequest, res: Response) {
-    const { id } = req.params
+    const id = req.params.id as string
     const { instrument, teach_or_perform, class_mode, base_price, performance_fee_inr, open_to_international, international_premium, tiers } = req.body
 
     const result = await TeacherService.updateInstrument(req.user!.id, id, {
@@ -179,7 +195,7 @@ export class TeacherController {
 
   // DELETE /api/v1/teachers/instruments/:id
   static async deleteInstrument(req: AuthRequest, res: Response) {
-    const { id } = req.params
+    const id = req.params.id as string
 
     await TeacherService.deleteInstrument(req.user!.id, id)
 

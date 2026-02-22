@@ -201,16 +201,107 @@ export class TeacherService {
     return updated
   }
 
-  // Get all teachers (public)
+  // Get all teachers (public) with server-side search, filtering, sorting, pagination
   static async getAllTeachers(filters?: {
     verified?: boolean
     limit?: number
     offset?: number
-  }) {
+    search?: string
+    instrument?: string
+    city?: string
+    level?: string
+    mode?: string
+    minPrice?: number
+    maxPrice?: number
+    sortBy?: string
+  }): Promise<{ teachers: any[]; total: number }> {
+    // Build Prisma WHERE clause
+    const where: any = {}
+    if (filters?.verified !== undefined) {
+      where.verified = filters.verified
+    }
+
+    const AND: any[] = []
+
+    // Full-text search across name, bio, city, instruments
+    if (filters?.search) {
+      AND.push({
+        OR: [
+          { name: { contains: filters.search, mode: 'insensitive' } },
+          { bio: { contains: filters.search, mode: 'insensitive' } },
+          { current_city: { contains: filters.search, mode: 'insensitive' } },
+          {
+            teacher_instruments: {
+              some: {
+                instrument: { contains: filters.search, mode: 'insensitive' },
+                teach_or_perform: { equals: 'teach', mode: 'insensitive' },
+              },
+            },
+          },
+        ],
+      })
+    }
+
+    // Instrument filter
+    if (filters?.instrument) {
+      AND.push({
+        teacher_instruments: {
+          some: {
+            instrument: { contains: filters.instrument, mode: 'insensitive' },
+            teach_or_perform: { equals: 'teach', mode: 'insensitive' },
+          },
+        },
+      })
+    }
+
+    // City filter
+    if (filters?.city) {
+      AND.push({
+        current_city: { contains: filters.city, mode: 'insensitive' },
+      })
+    }
+
+    // Level filter: teacher has a tier matching the level with price > 0
+    if (filters?.level) {
+      AND.push({
+        teacher_instruments: {
+          some: {
+            teacher_instrument_tiers: {
+              some: {
+                level: filters.level.toLowerCase() as any,
+                price_inr: { gt: 0 },
+              },
+            },
+          },
+        },
+      })
+    }
+
+    // Mode filter via class_formats array
+    if (filters?.mode) {
+      const modeLower = filters.mode.toLowerCase()
+      if (modeLower === 'online') {
+        AND.push({
+          teacher_formats: {
+            class_formats: { hasSome: ['Online'] },
+          },
+        })
+      } else if (modeLower === 'offline') {
+        AND.push({
+          teacher_formats: {
+            class_formats: { hasSome: ["At Student's Place", "At Teacher's Place"] },
+          },
+        })
+      }
+    }
+
+    if (AND.length > 0) {
+      where.AND = AND
+    }
+
+    // Fetch ALL matching teachers (we need to compute prices before paginating)
     const teachers = await prisma.teachers.findMany({
-      where: {
-        verified: filters?.verified,
-      },
+      where,
       include: {
         profiles: true,
         class_packages: {
@@ -224,24 +315,41 @@ export class TeacherService {
           },
         },
       },
-      take: filters?.limit || 20,
-      skip: filters?.offset || 0,
-      orderBy: {
-        created_at: 'desc',
-      },
     })
 
-    const teachersWithStartingPrice = teachers.map((teacher: any) => {
-      const toNum = (raw: any): number | null => {
-        if (raw === null || raw === undefined) return null
-        if (typeof raw === 'object' && typeof raw.toNumber === 'function') return raw.toNumber()
-        if (typeof raw === 'number') return raw
-        const n = Number(raw)
-        return Number.isNaN(n) ? null : n
+    // Helper to convert Prisma Decimal to number
+    const toNum = (raw: any): number | null => {
+      if (raw === null || raw === undefined) return null
+      if (typeof raw === 'object' && typeof raw.toNumber === 'function') return raw.toNumber()
+      if (typeof raw === 'number') return raw
+      const n = Number(raw)
+      return Number.isNaN(n) ? null : n
+    }
+
+    const normalize = (raw: any) => {
+      if (!raw) return null
+      const levels = ['beginner', 'intermediate', 'advanced'] as const
+      const out: any = {}
+      for (const level of levels) {
+        const val = raw[level]
+        if (!val) {
+          out[level] = { '10': ['', '', '', ''], '20': ['', '', '', ''], '30': ['', '', '', ''] }
+        } else if (Array.isArray(val)) {
+          out[level] = { '10': val, '20': val, '30': val }
+        } else {
+          out[level] = {
+            '10': val['10'] || ['', '', '', ''],
+            '20': val['20'] || ['', '', '', ''],
+            '30': val['30'] || ['', '', '', ''],
+          }
+        }
       }
+      return out
+    }
 
+    // Compute starting prices + normalize
+    const teachersWithPrice = teachers.map((teacher: any) => {
       const pricingConfig = buildPricingConfig(teacher)
-
       let minPrice: number | null = null
 
       if (teacher.teacher_instruments && teacher.teacher_instruments.length > 0) {
@@ -249,11 +357,8 @@ export class TeacherService {
           if (inst.teacher_instrument_tiers && inst.teacher_instrument_tiers.length > 0) {
             inst.teacher_instrument_tiers.forEach((tier: any) => {
               const teacherBasePrice = toNum(tier.price_inr)
-
               if (teacherBasePrice !== null && teacherBasePrice > 0) {
-                // Starting price = 30-session per-class (lowest tier markup)
                 const perClass30 = computeStartingPrice(teacherBasePrice, pricingConfig ?? undefined)
-
                 if (minPrice === null || perClass30 < minPrice) {
                   minPrice = perClass30
                 }
@@ -261,27 +366,6 @@ export class TeacherService {
             })
           }
         })
-      }
-
-      const normalize = (raw: any) => {
-        if (!raw) return null
-        const levels = ['beginner', 'intermediate', 'advanced'] as const
-        const out: any = {}
-        for (const level of levels) {
-          const val = raw[level]
-          if (!val) {
-            out[level] = { '10': ['', '', '', ''], '20': ['', '', '', ''], '30': ['', '', '', ''] }
-          } else if (Array.isArray(val)) {
-            out[level] = { '10': val, '20': val, '30': val }
-          } else {
-            out[level] = {
-              '10': val['10'] || ['', '', '', ''],
-              '20': val['20'] || ['', '', '', ''],
-              '30': val['30'] || ['', '', '', ''],
-            }
-          }
-        }
-        return out
       }
 
       return {
@@ -294,7 +378,42 @@ export class TeacherService {
       }
     })
 
-    return teachersWithStartingPrice
+    // Post-computation: filter by price range
+    let filtered = teachersWithPrice
+    if (filters?.minPrice != null || filters?.maxPrice != null) {
+      filtered = filtered.filter((t) => {
+        const price = t.starting_price_inr || 0
+        if (filters.minPrice != null && price < filters.minPrice) return false
+        if (filters.maxPrice != null && price > filters.maxPrice) return false
+        return true
+      })
+    }
+
+    // Sort
+    const sortBy = filters?.sortBy || 'az'
+    switch (sortBy) {
+      case 'az':
+        filtered.sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+        break
+      case 'za':
+        filtered.sort((a, b) => (b.name || '').localeCompare(a.name || ''))
+        break
+      case 'price_asc':
+        filtered.sort((a, b) => (a.starting_price_inr || 0) - (b.starting_price_inr || 0))
+        break
+      case 'price_desc':
+        filtered.sort((a, b) => (b.starting_price_inr || 0) - (a.starting_price_inr || 0))
+        break
+    }
+
+    const total = filtered.length
+
+    // Paginate
+    const offset = filters?.offset || 0
+    const limit = filters?.limit || 20
+    const paginated = filtered.slice(offset, offset + limit)
+
+    return { teachers: paginated, total }
   }
 
   // Get teacher bank details

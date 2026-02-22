@@ -55,18 +55,45 @@ export class BookingService {
 
     const teacherId = purchasedPackage.class_packages.teacher_id;
 
-    // Validate the slot is available for the requested duration
-    const isAvailable = await this.isSlotAvailableForDuration(
-      teacherId,
-      scheduledAt,
-      durationMinutes
-    );
-
-    if (!isAvailable) {
-      throw new Error("This time slot is no longer available");
+    // Block bookings on dates the teacher marked unavailable
+    const dateStr = scheduledAt.toISOString().split('T')[0];
+    const unavailableMarker = await prisma.teacher_availability.findFirst({
+      where: {
+        teacher_id: teacherId,
+        specific_date: new Date(dateStr),
+        is_unavailable: true,
+      },
+    });
+    if (unavailableMarker) {
+      throw new Error('The teacher is unavailable on this date. Please choose a different date.');
     }
 
-    // Create the booking
+    // Check for existing bookings that overlap this time slot (prevent double-booking)
+    const endTime = new Date(scheduledAt.getTime() + durationMinutes * 60 * 1000);
+    const existingBooking = await prisma.bookings.findFirst({
+      where: {
+        teacher_id: teacherId,
+        scheduled_at: {
+          lt: endTime,
+          gte: new Date(scheduledAt.getTime() - 12 * 60 * 60 * 1000),
+        },
+        status: {
+          in: ["PENDING_APPROVAL", "SCHEDULED", "RESCHEDULE_PROPOSED"],
+        },
+      },
+    });
+
+    if (existingBooking) {
+      const bookingEnd = new Date(
+        existingBooking.scheduled_at.getTime() +
+        (existingBooking.duration_minutes || 60) * 60 * 1000
+      );
+      if (scheduledAt < bookingEnd && endTime > existingBooking.scheduled_at) {
+        throw new Error("This time slot is already booked. Please pick a different time.");
+      }
+    }
+
+    // Create the booking — package sessions go to PENDING_APPROVAL so teacher can accept/reschedule
     const booking = await prisma.bookings.create({
       data: {
         student_id: studentId,
@@ -74,7 +101,7 @@ export class BookingService {
         purchased_package_id: purchasedPackageId,
         package_id: purchasedPackage.package_id,
         booking_type: "package_session",
-        status: "SCHEDULED", // Package sessions are auto-confirmed
+        status: "PENDING_APPROVAL",
         scheduled_at: scheduledAt,
         duration_minutes: durationMinutes,
         is_demo: false,
@@ -234,24 +261,20 @@ export class BookingService {
    */
   async isSlotAvailable(teacherId: string, scheduledAt: Date): Promise<boolean> {
     const dateStr = scheduledAt.toISOString().split("T")[0];
-    const startTimeStr = scheduledAt.toTimeString().slice(0, 5); // HH:MM format
     
     // Calculate end time for demo
     const endTime = new Date(scheduledAt.getTime() + DEMO_DURATION_MINUTES * 60 * 1000);
-    const endTimeStr = endTime.toTimeString().slice(0, 5);
 
-    // Check if teacher has availability that covers this time slot
-    const availability = await prisma.teacher_availability.findFirst({
+    // Check if teacher explicitly marked this date as unavailable
+    const unavailable = await prisma.teacher_availability.findFirst({
       where: {
         teacher_id: teacherId,
         specific_date: new Date(dateStr),
-        is_unavailable: false,
-        start_time: { lte: startTimeStr },
-        end_time: { gte: endTimeStr },
+        is_unavailable: true,
       },
     });
 
-    if (!availability) {
+    if (unavailable) {
       return false;
     }
 
@@ -267,14 +290,13 @@ export class BookingService {
         },
         AND: {
           scheduled_at: {
-            gte: new Date(scheduledAt.getTime() - 12 * 60 * 60 * 1000), // Check bookings in a reasonable window
+            gte: new Date(scheduledAt.getTime() - 12 * 60 * 60 * 1000),
           },
         },
       },
     });
 
     if (existingBooking) {
-      // Check if this booking actually overlaps
       const bookingEnd = new Date(
         existingBooking.scheduled_at.getTime() + 
         (existingBooking.duration_minutes || 60) * 60 * 1000
@@ -512,14 +534,47 @@ export class BookingService {
       throw new Error("Unauthorized");
     }
 
-    if (booking.status !== "PENDING_APPROVAL") {
+    if (booking.status !== "PENDING_APPROVAL" && booking.status !== "SCHEDULED") {
       throw new Error("Booking cannot be rescheduled in current status");
     }
 
-    // Check if the new time is available
-    const isAvailable = await this.isSlotAvailable(teacherId, newScheduledAt);
-    if (!isAvailable) {
-      throw new Error("The proposed time slot is not available");
+    // Block if the teacher marked the new date as unavailable
+    const dateStr = newScheduledAt.toISOString().split('T')[0];
+    const unavailableMarker = await prisma.teacher_availability.findFirst({
+      where: {
+        teacher_id: teacherId,
+        specific_date: new Date(dateStr),
+        is_unavailable: true,
+      },
+    });
+    if (unavailableMarker) {
+      throw new Error('You have marked this date as unavailable. Remove the unavailable marker first.');
+    }
+
+    // Check for overlapping bookings at the new time (prevent double-booking)
+    const durationMinutes = booking.duration_minutes || 60;
+    const endTime = new Date(newScheduledAt.getTime() + durationMinutes * 60 * 1000);
+    const overlapping = await prisma.bookings.findFirst({
+      where: {
+        teacher_id: teacherId,
+        id: { not: bookingId }, // exclude the current booking
+        scheduled_at: {
+          lt: endTime,
+          gte: new Date(newScheduledAt.getTime() - 12 * 60 * 60 * 1000),
+        },
+        status: {
+          in: ["PENDING_APPROVAL", "SCHEDULED", "RESCHEDULE_PROPOSED"],
+        },
+      },
+    });
+    if (overlapping) {
+      const overlapEnd = new Date(
+        overlapping.scheduled_at.getTime() +
+        (overlapping.duration_minutes || 60) * 60 * 1000
+      );
+      if (newScheduledAt < overlapEnd && endTime > overlapping.scheduled_at) {
+        throw new Error('This time slot conflicts with another booking. Please pick a different time.');
+      }
     }
 
     return prisma.bookings.update({
@@ -616,14 +671,13 @@ export class BookingService {
   }
 
   /**
-   * Get pending demo requests count for teacher (for badge/notification)
+   * Get pending requests count for teacher (demos + package sessions)
    */
   async getPendingRequestsCount(teacherId: string): Promise<number> {
     return prisma.bookings.count({
       where: {
         teacher_id: teacherId,
         status: "PENDING_APPROVAL",
-        is_demo: true,
       },
     });
   }

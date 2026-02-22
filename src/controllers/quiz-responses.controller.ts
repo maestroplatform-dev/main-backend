@@ -118,7 +118,7 @@ export class QuizResponseController {
    */
   static async updateQuizResponse(req: AuthRequest, res: Response) {
     try {
-      const { id } = req.params
+      const id = req.params.id as string
       const { contacted, admin_notes } = req.body
 
       const existing = await prisma.quiz_responses.findUnique({ where: { id } })

@@ -146,7 +146,7 @@ export class BookingController {
    */
   async getBookingById(req: AuthRequest, res: Response) {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const userId = req.user?.id;
 
       if (!userId) {
@@ -183,7 +183,7 @@ export class BookingController {
    */
   async acceptBooking(req: AuthRequest, res: Response) {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const teacherId = req.user?.id;
 
       if (!teacherId) {
@@ -210,7 +210,7 @@ export class BookingController {
    */
   async rescheduleBooking(req: AuthRequest, res: Response) {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const teacherId = req.user?.id;
       const { newScheduledAt } = req.body;
 
@@ -247,7 +247,7 @@ export class BookingController {
    */
   async confirmReschedule(req: AuthRequest, res: Response) {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const studentId = req.user?.id;
 
       if (!studentId) {
@@ -274,7 +274,7 @@ export class BookingController {
    */
   async cancelBooking(req: AuthRequest, res: Response) {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const userId = req.user?.id;
 
       if (!userId) {
@@ -325,7 +325,7 @@ export class BookingController {
    */
   async getPublicAvailability(req: AuthRequest, res: Response) {
     try {
-      const { teacherId } = req.params;
+      const teacherId = req.params.teacherId as string;
       const { startDate, endDate } = req.query;
 
       // Default to next 40 days if not specified
@@ -357,7 +357,7 @@ export class BookingController {
   async getStudentProfile(req: AuthRequest, res: Response) {
     try {
       const teacherId = req.user?.id;
-      const { studentId } = req.params;
+      const studentId = req.params.studentId as string;
 
       if (!teacherId) {
         res.status(401).json({ error: "Unauthorized" });

@@ -328,6 +328,13 @@ router.get(
   asyncHandler(TeacherAvailabilityController.getAvailableSlots)
 )
 
+// Unavailable dates for students (public - any authenticated user)
+router.get(
+  '/:teacherId/unavailable-dates',
+  authenticateUser,
+  asyncHandler(TeacherAvailabilityController.getPublicUnavailableDates)
+)
+
 router.get('/', asyncHandler(TeacherController.getAllTeachers))
 router.get('/:id', asyncHandler(TeacherController.getTeacherById))
 

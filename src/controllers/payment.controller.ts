@@ -23,13 +23,14 @@ interface CreateOrderBody {
   level: string;
   mode: string;
   payment_option: 'FLEXIBLE' | 'UPFRONT';
+  sessions_to_pay?: number;
 }
 
 interface VerifyPaymentBody {
   razorpay_order_id: string;
   razorpay_payment_id: string;
   razorpay_signature: string;
-  purchased_package_id: string;
+  purchase_id: string;
 }
 
 interface CreateNextPaymentBody {
@@ -87,7 +88,7 @@ export class PaymentController {
         return res.status(401).json({ error: 'Unauthorized' });
       }
 
-      const { package_id, teacher_id, scheduled_sessions, instrument, level, mode, payment_option } = req.body;
+      const { package_id, teacher_id, scheduled_sessions, instrument, level, mode, payment_option, sessions_to_pay } = req.body;
 
       // Validate required fields
       if (!package_id || !teacher_id || !scheduled_sessions || !instrument || !level || !mode || !payment_option) {
@@ -110,7 +111,8 @@ export class PaymentController {
         instrument,
         level,
         mode,
-        payment_option
+        payment_option,
+        sessions_to_pay,
       });
 
       return res.status(200).json({
@@ -137,10 +139,10 @@ export class PaymentController {
         return res.status(401).json({ error: 'Unauthorized' });
       }
 
-      const { razorpay_order_id, razorpay_payment_id, razorpay_signature, purchased_package_id } = req.body;
+      const { razorpay_order_id, razorpay_payment_id, razorpay_signature, purchase_id } = req.body;
 
       // Validate required fields
-      if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature || !purchased_package_id) {
+      if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature || !purchase_id) {
         return res.status(400).json({ error: 'Missing required payment verification fields' });
       }
 
@@ -148,7 +150,7 @@ export class PaymentController {
         razorpay_order_id,
         razorpay_payment_id,
         razorpay_signature,
-        purchased_package_id
+        purchased_package_id: purchase_id
       });
 
       return res.status(200).json({
@@ -247,7 +249,11 @@ export class PaymentController {
           start_time: b.scheduled_at?.toISOString().split('T')[1]?.substring(0, 5) || '',
           end_time: '',
           status: b.status,
-          meeting_link: b.meeting_link
+          meeting_link: b.meeting_link,
+          rescheduled_at: b.rescheduled_at?.toISOString() || null,
+          is_demo: b.is_demo,
+          duration_minutes: b.duration_minutes,
+          notes: b.notes,
         }))
       }));
 
@@ -326,7 +332,11 @@ export class PaymentController {
           start_time: b.scheduled_at?.toISOString().split('T')[1]?.substring(0, 5) || '',
           end_time: '',
           status: b.status,
-          meeting_link: b.meeting_link
+          meeting_link: b.meeting_link,
+          rescheduled_at: b.rescheduled_at?.toISOString() || null,
+          is_demo: b.is_demo,
+          duration_minutes: b.duration_minutes,
+          notes: b.notes,
         })),
         payments: pkg.purchase_payments || []
       };

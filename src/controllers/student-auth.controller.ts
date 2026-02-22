@@ -277,7 +277,7 @@ export class StudentAuthController {
         throw new AppError(403, 'This endpoint is only available in development', 'FORBIDDEN')
       }
 
-      const { email } = req.params
+      const email = req.params.email as string
       const remaining = OTPService.getOTPRemainingTime(email)
 
       res.json({

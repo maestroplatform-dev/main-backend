@@ -64,7 +64,7 @@ export class FeaturedTeachersController {
 
   // DELETE /api/v1/admin/featured-teachers/:teacherId (admin - remove one)
   static async removeFeaturedTeacher(req: AuthRequest, res: Response): Promise<void> {
-    const { teacherId } = req.params
+    const teacherId = req.params.teacherId as string
     
     await FeaturedTeachersService.removeFeaturedTeacher(teacherId)
 

@@ -62,7 +62,7 @@ export class SectionReviewController {
 
   // POST /api/v1/admin/section-reviews/:reviewId/action
   static async reviewSection(req: AuthRequest, res: Response) {
-    const { reviewId } = req.params
+    const reviewId = req.params.reviewId as string
     const { action, comment } = req.body
 
     if (!action || !['approve', 'reject', 'request_changes'].includes(action)) {

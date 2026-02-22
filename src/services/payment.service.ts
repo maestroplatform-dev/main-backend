@@ -36,13 +36,15 @@ interface CreateOrderRequest {
   level: string;
   mode: string;
   payment_option: 'FLEXIBLE' | 'UPFRONT';
+  sessions_to_pay?: number;
 }
 
 interface CreateOrderResponse {
-  purchased_package_id: string;
+  purchase_id: string;
   razorpay_order_id: string;
   amount: number;
   currency: string;
+  key_id: string;
   student_name: string;
   student_email: string;
   student_phone?: string;
@@ -143,7 +145,22 @@ export class PaymentService {
    */
   async createOrder(data: CreateOrderRequest): Promise<CreateOrderResponse> {
     const { student_id, package_id, teacher_id, scheduled_sessions, instrument, level, mode, payment_option } = data;
-    const sessions_to_pay = scheduled_sessions.length;
+    const sessions_to_pay = data.sessions_to_pay && data.sessions_to_pay > 0
+      ? Math.min(data.sessions_to_pay, scheduled_sessions.length)
+      : scheduled_sessions.length;
+
+    // Auto-expire stale PENDING packages (abandoned checkouts older than 30 min)
+    await prisma.purchased_packages.updateMany({
+      where: {
+        student_id,
+        teacher_id,
+        status: 'PENDING',
+        purchased_at: {
+          lt: new Date(Date.now() - 3 * 60 * 1000),
+        },
+      },
+      data: { status: 'EXPIRED' },
+    });
 
     // Validate no existing package
     const canPurchase = await this.validateNoExistingPackage(student_id, teacher_id);
@@ -301,10 +318,11 @@ export class PaymentService {
       (await prisma.users.findUnique({ where: { id: student_id } }))?.email || '' : '';
 
     return {
-      purchased_package_id: purchasedPackage.id,
+      purchase_id: purchasedPackage.id,
       razorpay_order_id: razorpayOrder.id,
       amount: amountToPay,
       currency: 'INR',
+      key_id: process.env.RAZORPAY_KEY_ID || '',
       student_name: studentName,
       student_email: studentEmail,
       student_phone: student.guardian_phone || undefined
@@ -683,10 +701,11 @@ export class PaymentService {
       (await prisma.users.findUnique({ where: { id: purchasedPackage.student_id } }))?.email || '' : '';
 
     return {
-      purchased_package_id: purchasedPackage.id,
+      purchase_id: purchasedPackage.id,
       razorpay_order_id: razorpayOrder.id,
       amount: amountToPay,
       currency: 'INR',
+      key_id: process.env.RAZORPAY_KEY_ID || '',
       student_name: studentName,
       student_email: studentEmail,
       student_phone: student?.guardian_phone || undefined
@@ -713,9 +732,6 @@ export class PaymentService {
         },
         scheduled_sessions: true,
         bookings: {
-          where: {
-            status: { in: ['SCHEDULED', 'COMPLETED'] }
-          },
           orderBy: { scheduled_at: 'asc' }
         }
       }
@@ -747,10 +763,9 @@ export class PaymentService {
         },
         bookings: {
           where: {
-            status: { in: ['SCHEDULED', 'COMPLETED'] }
+            status: { not: 'CANCELLED' }
           },
-          orderBy: { scheduled_at: 'asc' },
-          take: 10
+          orderBy: { scheduled_at: 'asc' }
         }
       },
       orderBy: { purchased_at: 'desc' }

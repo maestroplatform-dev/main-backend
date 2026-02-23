@@ -26,13 +26,13 @@ function createPrismaClient(): PrismaClient {
   const pool = new Pool({ 
     connectionString,
     // Supabase pooler has a max of ~15 connections in Session mode
-    // Keep pool very small to avoid exhaustion with concurrent requests
-    max: 5,
-    min: 1,
-    // Connection timeout
-    connectionTimeoutMillis: 5000,
-    // Idle connections will be closed after 5 seconds
-    idleTimeoutMillis: 5000,
+    // Keep pool small but allow enough for concurrent requests
+    max: 8,
+    min: 2,
+    // Connection timeout — give more headroom on cold starts
+    connectionTimeoutMillis: 10000,
+    // Idle connections will be closed after 30 seconds
+    idleTimeoutMillis: 30000,
     // Keep connection alive
     keepAlive: true,
     // Close idle connections to free up pool

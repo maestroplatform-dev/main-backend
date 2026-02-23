@@ -2,7 +2,7 @@ import rateLimit from 'express-rate-limit'
 
 export const apiLimiter = rateLimit({
   windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000'), // 15 minutes
-  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '100'),
+  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '300'), // 300 per 15 min (20/min)
   message: {
     success: false,
     error: {
@@ -16,7 +16,7 @@ export const apiLimiter = rateLimit({
 
 export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // 5 requests per window
+  max: 10, // 10 attempts per window
   message: {
     success: false,
     error: {

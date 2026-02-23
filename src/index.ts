@@ -17,6 +17,10 @@ const app: Application = express()
 const httpServer = createServer(app)
 const PORT = process.env.PORT || 4000
 
+// Trust proxy — required for Render, Railway, Heroku etc.
+// Enables express-rate-limit to read X-Forwarded-For correctly
+app.set('trust proxy', 1)
+
 // Security middleware
 app.use(helmet())
 

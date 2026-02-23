@@ -299,23 +299,42 @@ export class TeacherService {
       where.AND = AND
     }
 
-    // Fetch ALL matching teachers (we need to compute prices before paginating)
-    const teachers = await prisma.teachers.findMany({
-      where,
-      include: {
-        profiles: true,
-        class_packages: {
-          where: { is_active: true },
-        },
-        teacher_languages: true,
-        teacher_formats: true,
-        teacher_instruments: {
-          include: {
-            teacher_instrument_tiers: true,
+    const hasPriceFilter = filters?.minPrice != null || filters?.maxPrice != null
+
+    // Sort direction (price sorts need JS post-processing)
+    const sortBy = filters?.sortBy || 'az'
+    const needsJsSort = sortBy === 'price_asc' || sortBy === 'price_desc'
+
+    // Build Prisma orderBy for name-based sorts (applied at DB level)
+    let orderBy: any | undefined
+    if (sortBy === 'az') orderBy = { name: 'asc' }
+    else if (sortBy === 'za') orderBy = { name: 'desc' }
+
+    const offset = filters?.offset || 0
+    const limit = filters?.limit || 20
+
+    // Optimisation: when we don't need price filtering or price sorting,
+    // we can paginate at the DB level and avoid loading every teacher.
+    const canDbPaginate = !hasPriceFilter && !needsJsSort
+
+    // Fetch teachers — paginate at DB level when possible
+    const [teachers, totalCount] = await Promise.all([
+      prisma.teachers.findMany({
+        where,
+        include: {
+          teacher_languages: true,
+          teacher_formats: true,
+          teacher_instruments: {
+            include: {
+              teacher_instrument_tiers: true,
+            },
           },
         },
-      },
-    })
+        ...(orderBy ? { orderBy } : {}),
+        ...(canDbPaginate ? { skip: offset, take: limit } : {}),
+      }),
+      prisma.teachers.count({ where }),
+    ])
 
     // Helper to convert Prisma Decimal to number
     const toNum = (raw: any): number | null => {
@@ -378,39 +397,33 @@ export class TeacherService {
       }
     })
 
-    // Post-computation: filter by price range
+    // Post-computation: filter by price range (only when price filter is active)
     let filtered = teachersWithPrice
-    if (filters?.minPrice != null || filters?.maxPrice != null) {
+    if (hasPriceFilter) {
       filtered = filtered.filter((t) => {
         const price = t.starting_price_inr || 0
-        if (filters.minPrice != null && price < filters.minPrice) return false
-        if (filters.maxPrice != null && price > filters.maxPrice) return false
+        if (filters!.minPrice != null && price < filters!.minPrice) return false
+        if (filters!.maxPrice != null && price > filters!.maxPrice) return false
         return true
       })
     }
 
-    // Sort
-    const sortBy = filters?.sortBy || 'az'
-    switch (sortBy) {
-      case 'az':
-        filtered.sort((a, b) => (a.name || '').localeCompare(b.name || ''))
-        break
-      case 'za':
-        filtered.sort((a, b) => (b.name || '').localeCompare(a.name || ''))
-        break
-      case 'price_asc':
+    // Sort by price if needed (name sorts handled at DB level)
+    if (needsJsSort) {
+      if (sortBy === 'price_asc') {
         filtered.sort((a, b) => (a.starting_price_inr || 0) - (b.starting_price_inr || 0))
-        break
-      case 'price_desc':
+      } else {
         filtered.sort((a, b) => (b.starting_price_inr || 0) - (a.starting_price_inr || 0))
-        break
+      }
     }
 
-    const total = filtered.length
+    // If we already paginated at DB level, return as-is
+    if (canDbPaginate) {
+      return { teachers: filtered, total: totalCount }
+    }
 
-    // Paginate
-    const offset = filters?.offset || 0
-    const limit = filters?.limit || 20
+    // Otherwise paginate in JS (price filter/sort required full fetch)
+    const total = filtered.length
     const paginated = filtered.slice(offset, offset + limit)
 
     return { teachers: paginated, total }

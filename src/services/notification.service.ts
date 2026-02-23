@@ -5,19 +5,22 @@ export class NotificationService {
    * Get all notifications for a teacher (newest first)
    */
   static async getNotifications(teacherId: string, limit = 50, offset = 0) {
-    const [notifications, total, unreadCount] = await Promise.all([
-      prisma.notifications.findMany({
-        where: { teacher_id: teacherId },
-        orderBy: { created_at: 'desc' },
-        take: limit,
-        skip: offset,
-      }),
-      prisma.notifications.count({
-        where: { teacher_id: teacherId },
-      }),
-      prisma.notifications.count({
-        where: { teacher_id: teacherId, is_read: false },
-      }),
+    // Use a single query for notifications + count via Prisma transaction
+    // to avoid using 3 parallel connections
+    const whereAll = { teacher_id: teacherId }
+    const whereUnread = { teacher_id: teacherId, is_read: false }
+
+    const notifications = await prisma.notifications.findMany({
+      where: whereAll,
+      orderBy: { created_at: 'desc' },
+      take: limit,
+      skip: offset,
+    })
+
+    // Count queries are cheap — run them together in a single transaction (1 connection)
+    const [total, unreadCount] = await prisma.$transaction([
+      prisma.notifications.count({ where: whereAll }),
+      prisma.notifications.count({ where: whereUnread }),
     ])
 
     return {

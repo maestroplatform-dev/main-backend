@@ -49,11 +49,11 @@ export class BookingService {
       }
     });
 
-    if (bookedSessions >= purchasedPackage.class_packages.classes_count) {
+    if (bookedSessions >= (purchasedPackage.class_packages?.classes_count ?? purchasedPackage.classes_total)) {
       throw new Error("All sessions from this package have been booked");
     }
 
-    const teacherId = purchasedPackage.class_packages.teacher_id;
+    const teacherId = purchasedPackage.class_packages?.teacher_id ?? purchasedPackage.teacher_id;
 
     // Block bookings on dates the teacher marked unavailable
     const dateStr = scheduledAt.toISOString().split('T')[0];

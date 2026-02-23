@@ -25,6 +25,8 @@ declare global {
 function createPrismaClient(): PrismaClient {
   const pool = new Pool({ 
     connectionString,
+    // Supabase requires SSL — pg ignores ?sslmode=require from the URL
+    ssl: { rejectUnauthorized: false },
     // Supabase pooler has a max of ~15 connections in Session mode
     // Keep pool small but allow enough for concurrent requests
     max: 8,
@@ -39,8 +41,6 @@ function createPrismaClient(): PrismaClient {
     keepAlive: true,
     // Close idle connections to free up pool
     allowExitOnIdle: false,
-    // Prevent runaway queries from holding connections forever
-    statement_timeout: 15000,
   })
 
   // Log pool errors so they don't crash the process silently

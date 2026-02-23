@@ -498,7 +498,7 @@ model profiles {
 model purchased_packages {
   id                  String                       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   student_id          String                       @db.Uuid
-  package_id          String                       @db.Uuid
+  package_id          String?                      @db.Uuid
   classes_total       Int
   classes_remaining   Int
   purchased_at        DateTime?                    @default(now()) @db.Timestamptz(6)
@@ -519,7 +519,7 @@ model purchased_packages {
   bookings            bookings[]
   scheduled_sessions  package_scheduled_sessions[]
   purchase_payments   purchase_payments[]
-  class_packages      class_packages               @relation(fields: [package_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  class_packages      class_packages?              @relation(fields: [package_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   students            students                     @relation(fields: [student_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   teachers            teachers                     @relation(fields: [teacher_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 

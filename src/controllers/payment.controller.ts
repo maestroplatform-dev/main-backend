@@ -12,7 +12,7 @@ interface ValidateScheduleBody {
 }
 
 interface CreateOrderBody {
-  package_id: string;
+  package_id?: string;
   teacher_id: string;
   scheduled_sessions: Array<{
     date: string;
@@ -24,6 +24,7 @@ interface CreateOrderBody {
   mode: string;
   payment_option: 'FLEXIBLE' | 'UPFRONT';
   sessions_to_pay?: number;
+  sessions_count?: number;
 }
 
 interface VerifyPaymentBody {
@@ -88,15 +89,16 @@ export class PaymentController {
         return res.status(401).json({ error: 'Unauthorized' });
       }
 
-      const { package_id, teacher_id, scheduled_sessions, instrument, level, mode, payment_option, sessions_to_pay } = req.body;
+      const { package_id, teacher_id, scheduled_sessions, instrument, level, mode, payment_option, sessions_to_pay, sessions_count } = req.body;
 
       // Validate required fields
-      if (!package_id || !teacher_id || !scheduled_sessions || !instrument || !level || !mode || !payment_option) {
+      if (!teacher_id || !instrument || !level || !mode || !payment_option) {
         return res.status(400).json({ error: 'Missing required fields' });
       }
 
-      if (scheduled_sessions.length === 0) {
-        return res.status(400).json({ error: 'Please schedule at least one session' });
+      // Must have either package_id or sessions_count
+      if (!package_id && (!sessions_count || sessions_count <= 0)) {
+        return res.status(400).json({ error: 'Please specify the number of sessions' });
       }
 
       if (!['FLEXIBLE', 'UPFRONT'].includes(payment_option)) {
@@ -107,12 +109,13 @@ export class PaymentController {
         student_id: userId,
         package_id,
         teacher_id,
-        scheduled_sessions,
+        scheduled_sessions: scheduled_sessions || [],
         instrument,
         level,
         mode,
         payment_option,
         sessions_to_pay,
+        sessions_count,
       });
 
       return res.status(200).json({

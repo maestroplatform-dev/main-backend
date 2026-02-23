@@ -25,7 +25,7 @@ interface ValidateScheduleResponse {
 
 interface CreateOrderRequest {
   student_id: string;
-  package_id: string;
+  package_id?: string;
   teacher_id: string;
   scheduled_sessions: Array<{
     date: string;
@@ -37,6 +37,7 @@ interface CreateOrderRequest {
   mode: string;
   payment_option: 'FLEXIBLE' | 'UPFRONT';
   sessions_to_pay?: number;
+  sessions_count?: number; // total sessions when purchasing without a package
 }
 
 interface CreateOrderResponse {
@@ -145,11 +146,17 @@ export class PaymentService {
    */
   async createOrder(data: CreateOrderRequest): Promise<CreateOrderResponse> {
     const { student_id, package_id, teacher_id, scheduled_sessions, instrument, level, mode, payment_option } = data;
-    const sessions_to_pay = data.sessions_to_pay && data.sessions_to_pay > 0
-      ? Math.min(data.sessions_to_pay, scheduled_sessions.length)
-      : scheduled_sessions.length;
 
-    // Auto-expire stale PENDING packages (abandoned checkouts older than 30 min)
+    // Determine total sessions: from sessions_count param, or from package, or from scheduled_sessions
+    const requestedSessions = data.sessions_count && data.sessions_count > 0
+      ? data.sessions_count
+      : undefined;
+
+    const sessions_to_pay = data.sessions_to_pay && data.sessions_to_pay > 0
+      ? data.sessions_to_pay
+      : (scheduled_sessions.length > 0 ? scheduled_sessions.length : requestedSessions || 0);
+
+    // Auto-expire stale PENDING packages (abandoned checkouts older than 3 min)
     await prisma.purchased_packages.updateMany({
       where: {
         student_id,
@@ -168,18 +175,42 @@ export class PaymentService {
       throw new Error('You already have an active package with this teacher');
     }
 
-    // Fetch package details
-    const classPackage = await prisma.class_packages.findUnique({
-      where: { id: package_id },
-      include: { teachers: true }
-    });
+    // Determine classes count and validity
+    let classesCount: number;
+    let validityDays: number;
 
-    if (!classPackage) {
-      throw new Error('Package not found');
+    if (package_id) {
+      // Legacy flow: fetch from class_packages
+      const classPackage = await prisma.class_packages.findUnique({
+        where: { id: package_id },
+        include: { teachers: true }
+      });
+
+      if (!classPackage) {
+        throw new Error('Package not found');
+      }
+
+      if (classPackage.teacher_id !== teacher_id) {
+        throw new Error('Package does not belong to the specified teacher');
+      }
+
+      classesCount = classPackage.classes_count;
+      validityDays = classPackage.validity_days;
+    } else {
+      // New flow: dynamic session count without a package
+      classesCount = requestedSessions || sessions_to_pay;
+      if (!classesCount || classesCount <= 0) {
+        throw new Error('Please specify the number of sessions');
+      }
+      // Validity: 7 days per session, minimum 30 days, maximum 365 days
+      validityDays = Math.min(365, Math.max(30, classesCount * 7));
     }
 
-    if (classPackage.teacher_id !== teacher_id) {
-      throw new Error('Package does not belong to the specified teacher');
+    // Ensure sessions_to_pay doesn't exceed total
+    const effectiveSessionsToPay = Math.min(sessions_to_pay, classesCount);
+
+    if (effectiveSessionsToPay <= 0) {
+      throw new Error('Please specify the number of sessions to pay for');
     }
 
     // Fetch student details
@@ -194,7 +225,6 @@ export class PaymentService {
 
     // Calculate pricing using the formula (server-side validation)
     // Look up the teacher's base price for the selected instrument + level
-    // teach_or_perform may be 'teach' or 'Teach' (case inconsistency in data)
     const teacherInstrument = await prisma.teacher_instruments.findFirst({
       where: {
         teacher_id,
@@ -208,9 +238,6 @@ export class PaymentService {
       },
     }) as any;
 
-    const classesCount = classPackage.classes_count;
-
-    // Compute price from formula if instrument/level tier is found
     let totalPackagePrice: number;
     let pricePerSession: number;
 
@@ -243,28 +270,24 @@ export class PaymentService {
         pricePerSession = computePerClassPrice(teacherBasePrice, classesCount, pricingConfig ?? undefined);
         totalPackagePrice = pricePerSession * classesCount;
       } else {
-        // Fallback to class_packages.price
-        totalPackagePrice = Number(classPackage.price);
-        pricePerSession = totalPackagePrice / classesCount;
+        throw new Error('Teacher pricing not configured for this instrument and level');
       }
     } else {
-      // Fallback to class_packages.price
-      totalPackagePrice = Number(classPackage.price);
-      pricePerSession = totalPackagePrice / classesCount;
+      throw new Error('Teacher pricing not found for the selected instrument and level');
     }
 
-    const amountToPay = pricePerSession * sessions_to_pay;
+    const amountToPay = pricePerSession * effectiveSessionsToPay;
     const amountInPaisa = Math.round(amountToPay * 100); // Razorpay expects amount in paisa
 
-    // Calculate expiry date (validity_days from package)
+    // Calculate expiry date
     const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + classPackage.validity_days);
+    expiresAt.setDate(expiresAt.getDate() + validityDays);
 
     // Create purchased package in PENDING status
     const purchasedPackage = await prisma.purchased_packages.create({
       data: {
         student_id,
-        package_id,
+        package_id: package_id || null,
         teacher_id,
         instrument,
         level,
@@ -292,7 +315,7 @@ export class PaymentService {
         purchased_package_id: purchasedPackage.id,
         student_id,
         teacher_id,
-        sessions_covered: sessions_to_pay.toString(),
+        sessions_covered: effectiveSessionsToPay.toString(),
         payment_option
       }
     });
@@ -304,7 +327,7 @@ export class PaymentService {
         razorpay_order_id: razorpayOrder.id,
         amount: amountToPay,
         currency: 'INR',
-        sessions_covered: sessions_to_pay,
+        sessions_covered: effectiveSessionsToPay,
         status: 'PENDING',
         metadata: {
           scheduled_sessions: scheduled_sessions

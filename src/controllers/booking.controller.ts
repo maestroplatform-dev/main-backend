@@ -206,15 +206,15 @@ export class BookingController {
 
   /**
    * PATCH /api/bookings/:id/reschedule
-   * Teacher proposes a new time
+   * Teacher or student proposes a new time
    */
   async rescheduleBooking(req: AuthRequest, res: Response) {
     try {
       const id = req.params.id as string;
-      const teacherId = req.user?.id;
+      const userId = req.user?.id;
       const { newScheduledAt } = req.body;
 
-      if (!teacherId) {
+      if (!userId) {
         res.status(401).json({ error: "Unauthorized" });
         return;
       }
@@ -226,13 +226,13 @@ export class BookingController {
 
       const booking = await bookingService.rescheduleBooking(
         id,
-        teacherId,
+        userId,
         new Date(newScheduledAt)
       );
 
       res.json({
         success: true,
-        message: "Reschedule proposal sent to student",
+        message: "Reschedule proposal sent successfully",
         data: booking,
       });
     } catch (error: any) {
@@ -243,19 +243,19 @@ export class BookingController {
 
   /**
    * PATCH /api/bookings/:id/confirm-reschedule
-   * Student confirms the rescheduled time
+   * Counterparty confirms the rescheduled time
    */
   async confirmReschedule(req: AuthRequest, res: Response) {
     try {
       const id = req.params.id as string;
-      const studentId = req.user?.id;
+      const userId = req.user?.id;
 
-      if (!studentId) {
+      if (!userId) {
         res.status(401).json({ error: "Unauthorized" });
         return;
       }
 
-      const booking = await bookingService.confirmReschedule(id, studentId);
+      const booking = await bookingService.confirmReschedule(id, userId);
 
       res.json({
         success: true,
@@ -265,6 +265,33 @@ export class BookingController {
     } catch (error: any) {
       console.error("Error confirming reschedule:", error);
       res.status(400).json({ error: error.message || "Failed to confirm reschedule" });
+    }
+  }
+
+  /**
+   * PATCH /api/bookings/:id/complete
+   * Teacher marks a class as completed
+   */
+  async markBookingCompleted(req: AuthRequest, res: Response) {
+    try {
+      const id = req.params.id as string;
+      const teacherId = req.user?.id;
+
+      if (!teacherId) {
+        res.status(401).json({ error: "Unauthorized" });
+        return;
+      }
+
+      const booking = await bookingService.markBookingCompleted(id, teacherId);
+
+      res.json({
+        success: true,
+        message: "Attendance marked successfully",
+        data: booking,
+      });
+    } catch (error: any) {
+      console.error("Error marking booking completed:", error);
+      res.status(400).json({ error: error.message || "Failed to mark booking completed" });
     }
   }
 

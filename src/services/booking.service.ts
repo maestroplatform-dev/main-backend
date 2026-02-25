@@ -519,7 +519,7 @@ export class BookingService {
    */
   async rescheduleBooking(
     bookingId: string,
-    teacherId: string,
+    userId: string,
     newScheduledAt: Date
   ) {
     const booking = await prisma.bookings.findUnique({
@@ -530,11 +530,11 @@ export class BookingService {
       throw new Error("Booking not found");
     }
 
-    if (booking.teacher_id !== teacherId) {
+    if (booking.teacher_id !== userId && booking.student_id !== userId) {
       throw new Error("Unauthorized");
     }
 
-    if (booking.status !== "PENDING_APPROVAL" && booking.status !== "SCHEDULED") {
+    if (booking.status !== "PENDING_APPROVAL" && booking.status !== "SCHEDULED" && booking.status !== "RESCHEDULE_PROPOSED") {
       throw new Error("Booking cannot be rescheduled in current status");
     }
 
@@ -542,7 +542,7 @@ export class BookingService {
     const dateStr = newScheduledAt.toISOString().split('T')[0];
     const unavailableMarker = await prisma.teacher_availability.findFirst({
       where: {
-        teacher_id: teacherId,
+        teacher_id: booking.teacher_id,
         specific_date: new Date(dateStr),
         is_unavailable: true,
       },
@@ -556,7 +556,7 @@ export class BookingService {
     const endTime = new Date(newScheduledAt.getTime() + durationMinutes * 60 * 1000);
     const overlapping = await prisma.bookings.findFirst({
       where: {
-        teacher_id: teacherId,
+        teacher_id: booking.teacher_id,
         id: { not: bookingId }, // exclude the current booking
         scheduled_at: {
           lt: endTime,
@@ -582,7 +582,7 @@ export class BookingService {
       data: {
         status: "RESCHEDULE_PROPOSED",
         rescheduled_at: newScheduledAt,
-        rescheduled_by: teacherId,
+        rescheduled_by: userId,
         updated_at: new Date(),
       },
       include: {
@@ -599,7 +599,7 @@ export class BookingService {
   /**
    * Student confirms the rescheduled time
    */
-  async confirmReschedule(bookingId: string, studentId: string) {
+  async confirmReschedule(bookingId: string, userId: string) {
     const booking = await prisma.bookings.findUnique({
       where: { id: bookingId },
     });
@@ -608,7 +608,10 @@ export class BookingService {
       throw new Error("Booking not found");
     }
 
-    if (booking.student_id !== studentId) {
+    const isTeacher = booking.teacher_id === userId;
+    const isStudent = booking.student_id === userId;
+
+    if (!isTeacher && !isStudent) {
       throw new Error("Unauthorized");
     }
 
@@ -618,6 +621,10 @@ export class BookingService {
 
     if (!booking.rescheduled_at) {
       throw new Error("No rescheduled time found");
+    }
+
+    if (booking.rescheduled_by === userId) {
+      throw new Error("You cannot confirm your own reschedule proposal");
     }
 
     return prisma.bookings.update({
@@ -637,6 +644,75 @@ export class BookingService {
           select: { id: true, name: true },
         },
       },
+    });
+  }
+
+  /**
+   * Teacher marks a class as completed (attendance)
+   */
+  async markBookingCompleted(bookingId: string, teacherId: string) {
+    const booking = await prisma.bookings.findUnique({
+      where: { id: bookingId },
+    });
+
+    if (!booking) {
+      throw new Error("Booking not found");
+    }
+
+    if (booking.teacher_id !== teacherId) {
+      throw new Error("Unauthorized");
+    }
+
+    if (booking.status === "COMPLETED") {
+      throw new Error("Booking is already marked as completed");
+    }
+
+    if (booking.status !== "SCHEDULED") {
+      throw new Error("Only scheduled classes can be marked as completed");
+    }
+
+    if (new Date(booking.scheduled_at) > new Date()) {
+      throw new Error("You can only mark attendance for classes that have already started");
+    }
+
+    return prisma.$transaction(async (tx) => {
+      const updatedBooking = await tx.bookings.update({
+        where: { id: bookingId },
+        data: {
+          status: "COMPLETED",
+          updated_at: new Date(),
+        },
+        include: {
+          students: {
+            select: { id: true, name: true },
+          },
+          teachers: {
+            select: { id: true, name: true },
+          },
+        },
+      });
+
+      if (booking.purchased_package_id) {
+        const purchasedPackage = await tx.purchased_packages.findUnique({
+          where: { id: booking.purchased_package_id },
+          select: {
+            id: true,
+            classes_completed: true,
+            classes_total: true,
+          },
+        });
+
+        if (purchasedPackage && purchasedPackage.classes_completed < purchasedPackage.classes_total) {
+          await tx.purchased_packages.update({
+            where: { id: purchasedPackage.id },
+            data: {
+              classes_completed: { increment: 1 },
+            },
+          });
+        }
+      }
+
+      return updatedBooking;
     });
   }
 
@@ -722,10 +798,13 @@ export class BookingService {
       orderBy: { scheduled_at: "desc" },
     });
 
-    // Calculate stats
-    const completedBookings = bookings.filter(b => b.status === "COMPLETED");
-    const scheduledBookings = bookings.filter(b => b.status === "SCHEDULED");
-    const totalBookings = bookings.length;
+    // Exclude demo bookings from stats (they don't consume package slots)
+    const packageBookings = bookings.filter(b => !b.is_demo);
+
+    // Calculate stats (only for package bookings)
+    const completedBookings = packageBookings.filter(b => b.status === "COMPLETED");
+    const scheduledBookings = packageBookings.filter(b => b.status === "SCHEDULED");
+    const totalBookings = packageBookings.length;
     const attendance = totalBookings > 0 
       ? Math.round((completedBookings.length / totalBookings) * 100) 
       : 0;
@@ -764,27 +843,36 @@ export class BookingService {
       : { completed: 0, total: 0 };
 
     // Format class history
-    const classHistory = bookings.map(booking => ({
-      id: booking.id,
-      date: new Date(booking.scheduled_at).toLocaleDateString("en-US", {
-        weekday: "short",
-        day: "numeric",
-        month: "short",
-        year: "numeric",
-      }),
-      time: `${new Date(booking.scheduled_at).toLocaleTimeString("en-US", {
-        hour: "numeric",
-        minute: "2-digit",
-        hour12: true,
-      })} - ${new Date(new Date(booking.scheduled_at).getTime() + (booking.duration_minutes || 60) * 60000).toLocaleTimeString("en-US", {
-        hour: "numeric",
-        minute: "2-digit",
-        hour12: true,
-      })}`,
-      topic: booking.is_demo ? "Demo Session" : "Class Session",
-      status: booking.status.toLowerCase() as "completed" | "cancelled" | "missed",
-      notes: booking.notes || undefined,
-    }));
+    const classHistory = bookings.map(booking => {
+      // Use rescheduled_at if the booking has been rescheduled, otherwise use scheduled_at
+      const displayDate = booking.status === "RESCHEDULE_PROPOSED" && booking.rescheduled_at 
+        ? booking.rescheduled_at 
+        : booking.scheduled_at;
+      
+      return {
+        id: booking.id,
+        date: new Date(displayDate).toLocaleDateString("en-US", {
+          weekday: "short",
+          day: "numeric",
+          month: "short",
+          year: "numeric",
+        }),
+        time: `${new Date(displayDate).toLocaleTimeString("en-US", {
+          hour: "numeric",
+          minute: "2-digit",
+          hour12: true,
+        })} - ${new Date(new Date(displayDate).getTime() + (booking.duration_minutes || 60) * 60000).toLocaleTimeString("en-US", {
+          hour: "numeric",
+          minute: "2-digit",
+          hour12: true,
+        })}`,
+        topic: booking.is_demo ? "Demo Session" : "Class Session",
+        status: booking.status === "RESCHEDULE_PROPOSED" 
+          ? "scheduled" 
+          : (booking.status.toLowerCase() as "completed" | "cancelled" | "missed" | "scheduled"),
+        notes: booking.notes || undefined,
+      };
+    });
 
     return {
       id: student.id,
@@ -806,21 +894,28 @@ export class BookingService {
       attendance,
       nextClass: nextBooking
         ? {
-            date: new Date(nextBooking.scheduled_at).toLocaleDateString("en-US", {
+            date: new Date(nextBooking.status === "RESCHEDULE_PROPOSED" && nextBooking.rescheduled_at 
+              ? nextBooking.rescheduled_at 
+              : nextBooking.scheduled_at).toLocaleDateString("en-US", {
               weekday: "short",
               day: "numeric",
               month: "short",
               year: "numeric",
             }),
-            time: `${new Date(nextBooking.scheduled_at).toLocaleTimeString("en-US", {
-              hour: "numeric",
-              minute: "2-digit",
-              hour12: true,
-            })} - ${new Date(new Date(nextBooking.scheduled_at).getTime() + (nextBooking.duration_minutes || 60) * 60000).toLocaleTimeString("en-US", {
-              hour: "numeric",
-              minute: "2-digit",
-              hour12: true,
-            })}`,
+            time: (() => {
+              const displayDate = nextBooking.status === "RESCHEDULE_PROPOSED" && nextBooking.rescheduled_at 
+                ? nextBooking.rescheduled_at 
+                : nextBooking.scheduled_at;
+              return `${new Date(displayDate).toLocaleTimeString("en-US", {
+                hour: "numeric",
+                minute: "2-digit",
+                hour12: true,
+              })} - ${new Date(new Date(displayDate).getTime() + (nextBooking.duration_minutes || 60) * 60000).toLocaleTimeString("en-US", {
+                hour: "numeric",
+                minute: "2-digit",
+                hour12: true,
+              })}`;
+            })(),
             mode: "online" as const,
             meetingLink: nextBooking.meeting_link,
           }

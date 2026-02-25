@@ -19,6 +19,7 @@ router.get("/teacher/pending-count", bookingController.getPendingCount.bind(book
 router.get("/teacher/student/:studentId", bookingController.getStudentProfile.bind(bookingController));
 router.patch("/:id/accept", bookingController.acceptBooking.bind(bookingController));
 router.patch("/:id/reschedule", bookingController.rescheduleBooking.bind(bookingController));
+router.patch("/:id/complete", bookingController.markBookingCompleted.bind(bookingController));
 
 // Shared routes
 router.get("/:id", bookingController.getBookingById.bind(bookingController));

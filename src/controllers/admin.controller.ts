@@ -251,4 +251,41 @@ export class AdminController {
     })
   }
 
+  // GET /api/v1/admin/payments - Get payment statistics and transactions
+  static async getPaymentStats(req: AuthRequest, res: Response): Promise<void> {
+    const result = await AdminService.getPaymentStats({
+      status: req.query.status as string,
+      dateFrom: req.query.dateFrom as string,
+      dateTo: req.query.dateTo as string,
+      teacherId: req.query.teacherId as string,
+      studentId: req.query.studentId as string,
+      page: parseInt(req.query.page as string) || 1,
+      limit: parseInt(req.query.limit as string) || 50,
+    })
+    
+    res.json({
+      success: true,
+      data: result,
+    })
+  }
+
+  // GET /api/v1/admin/earnings - Get teacher earnings overview
+  static async getTeacherEarnings(req: AuthRequest, res: Response): Promise<void> {
+    const hasBankDetails = req.query.hasBankDetails === 'true' ? true : 
+                           req.query.hasBankDetails === 'false' ? false : 
+                           undefined
+
+    const result = await AdminService.getTeacherEarnings({
+      teacherId: req.query.teacherId as string,
+      hasBankDetails,
+      page: parseInt(req.query.page as string) || 1,
+      limit: parseInt(req.query.limit as string) || 50,
+    })
+    
+    res.json({
+      success: true,
+      data: result,
+    })
+  }
+
 }

@@ -12,6 +12,10 @@ const router = Router()
 // Dashboard statistics
 router.get('/stats', apiLimiter, authenticateUser, requireRole('admin'), asyncHandler(AdminController.getDashboardStats))
 
+// Financial tracking
+router.get('/payments', apiLimiter, authenticateUser, requireRole('admin'), asyncHandler(AdminController.getPaymentStats))
+router.get('/earnings', apiLimiter, authenticateUser, requireRole('admin'), asyncHandler(AdminController.getTeacherEarnings))
+
 // Teacher management
 router.get('/teachers', apiLimiter, authenticateUser, requireRole('admin'), asyncHandler(AdminController.listTeachers))
 router.get('/teachers/:id/onboarding', apiLimiter, authenticateUser, requireRole('admin'), asyncHandler(AdminController.getTeacherOnboardingData))

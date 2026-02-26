@@ -822,4 +822,287 @@ export class AdminService {
     }
   }
 
+  // Get payment statistics and transactions
+  static async getPaymentStats(params: {
+    status?: string
+    dateFrom?: string
+    dateTo?: string
+    teacherId?: string
+    studentId?: string
+    page?: number
+    limit?: number
+  }) {
+    const { status, dateFrom, dateTo, teacherId, studentId, page = 1, limit = 50 } = params
+
+    // Build where clause
+    const where: any = {}
+    
+    if (status) {
+      where.status = status
+    }
+    
+    if (dateFrom || dateTo) {
+      where.created_at = {}
+      if (dateFrom) where.created_at.gte = new Date(dateFrom)
+      if (dateTo) where.created_at.lte = new Date(dateTo)
+    }
+
+    if (teacherId || studentId) {
+      where.purchased_packages = {}
+      if (teacherId) where.purchased_packages.teacher_id = teacherId
+      if (studentId) where.purchased_packages.student_id = studentId
+    }
+
+    // Get payments with pagination
+    const [payments, total] = await Promise.all([
+      prisma.purchase_payments.findMany({
+        where,
+        include: {
+          purchased_packages: {
+            include: {
+              students: {
+                select: {
+                  id: true,
+                  name: true,
+                  profiles: {
+                    select: {
+                      name: true
+                    }
+                  }
+                }
+              },
+              teachers: {
+                select: {
+                  id: true,
+                  name: true
+                }
+              }
+            }
+          }
+        },
+        orderBy: { created_at: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit
+      }),
+      prisma.purchase_payments.count({ where })
+    ])
+
+    // Get summary stats
+    const [statusBreakdown, revenueStats] = await Promise.all([
+      prisma.purchase_payments.groupBy({
+        by: ['status'],
+        _count: true,
+        _sum: { amount: true }
+      }),
+      prisma.purchase_payments.aggregate({
+        where: { status: 'SUCCESS' },
+        _sum: { amount: true },
+        _count: true,
+        _avg: { amount: true }
+      })
+    ])
+
+    // Revenue by date (last 30 days)
+    const thirtyDaysAgo = new Date()
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+    
+    const dailyRevenue = await prisma.$queryRaw<Array<{ date: Date; total: number; count: number }>>`
+      SELECT 
+        DATE(created_at) as date,
+        SUM(CAST(amount AS DECIMAL))::FLOAT as total,
+        COUNT(*)::INT as count
+      FROM purchase_payments
+      WHERE status = 'SUCCESS' AND created_at >= ${thirtyDaysAgo}
+      GROUP BY DATE(created_at)
+      ORDER BY date DESC
+    `
+
+    return {
+      payments: payments.map(p => ({
+        id: p.id,
+        package_id: p.purchased_package_id,
+        amount: Number(p.amount),
+        currency: p.currency,
+        status: p.status,
+        payment_method: p.payment_method,
+        sessions_covered: p.sessions_covered,
+        razorpay_order_id: p.razorpay_order_id,
+        razorpay_payment_id: p.razorpay_payment_id,
+        created_at: p.created_at,
+        completed_at: p.completed_at,
+        student: {
+          id: p.purchased_packages.students.id,
+          name: p.purchased_packages.students.name || p.purchased_packages.students.profiles?.name || 'Unknown'
+        },
+        teacher: {
+          id: p.purchased_packages.teachers.id,
+          name: p.purchased_packages.teachers.name || 'Unknown'
+        },
+        package: {
+          instrument: p.purchased_packages.instrument,
+          level: p.purchased_packages.level,
+          mode: p.purchased_packages.mode
+        }
+      })),
+      summary: {
+        total_revenue: Number(revenueStats._sum.amount || 0),
+        total_transactions: revenueStats._count,
+        average_transaction: Number(revenueStats._avg.amount || 0),
+        by_status: statusBreakdown.map(s => ({
+          status: s.status,
+          count: s._count,
+          amount: Number(s._sum.amount || 0)
+        }))
+      },
+      daily_revenue: dailyRevenue.map(d => ({
+        date: d.date.toISOString().split('T')[0],
+        total: d.total,
+        count: d.count
+      })),
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit)
+      }
+    }
+  }
+
+  // Get teacher earnings overview
+  static async getTeacherEarnings(params: {
+    teacherId?: string
+    hasBankDetails?: boolean
+    page?: number
+    limit?: number
+  }) {
+    const { teacherId, hasBankDetails, page = 1, limit = 50 } = params
+
+    // Build where clause for teachers
+    const teacherWhere: any = {}
+    if (teacherId) {
+      teacherWhere.id = teacherId
+    }
+
+    // Get teachers with their earnings
+    const teachers = await prisma.teachers.findMany({
+      where: teacherWhere,
+      select: {
+        id: true,
+        name: true,
+        profile_picture: true,
+        profiles: {
+          select: {
+            users: {
+              select: {
+                email: true
+              }
+            }
+          }
+        },
+        teacher_bank_details: {
+          select: {
+            bank_name: true,
+            account_holder_name: true,
+            account_number: true,
+            verified: true
+          }
+        },
+        purchased_packages: {
+          where: {
+            status: 'ACTIVE'
+          },
+          select: {
+            id: true,
+            price_per_session: true,
+            classes_completed: true,
+            amount_paid: true,
+            total_package_price: true
+          }
+        },
+        bookings: {
+          where: {
+            status: 'COMPLETED',
+            is_demo: false
+          },
+          select: {
+            id: true,
+            purchased_package_id: true
+          }
+        }
+      },
+      skip: (page - 1) * limit,
+      take: limit
+    })
+
+    const total = await prisma.teachers.count({ where: teacherWhere })
+
+    // Calculate earnings for each teacher
+    const teacherEarnings = teachers
+      .map(teacher => {
+        // Calculate total earnings from completed bookings
+        const completedBookings = teacher.bookings.length
+        
+        // Get unique packages with completed classes
+        const packagesMap = new Map()
+        teacher.purchased_packages.forEach(pkg => {
+          packagesMap.set(pkg.id, {
+            price_per_session: Number(pkg.price_per_session),
+            classes_completed: pkg.classes_completed
+          })
+        })
+
+        // Calculate total earnings (completed classes × price per session)
+        let totalEarnings = 0
+        packagesMap.forEach(pkg => {
+          totalEarnings += pkg.price_per_session * pkg.classes_completed
+        })
+
+        const hasBankDetailsSetup = !!teacher.teacher_bank_details
+        const bankVerified = teacher.teacher_bank_details?.verified || false
+
+        return {
+          teacher_id: teacher.id,
+          teacher_name: teacher.name || 'Unknown',
+          teacher_email: teacher.profiles?.users?.email || '',
+          profile_picture: teacher.profile_picture,
+          total_earnings: totalEarnings,
+          completed_bookings: completedBookings,
+          active_packages: teacher.purchased_packages.length,
+          has_bank_details: hasBankDetailsSetup,
+          bank_verified: bankVerified,
+          bank_name: teacher.teacher_bank_details?.bank_name || null,
+          account_holder: teacher.teacher_bank_details?.account_holder_name || null
+        }
+      })
+      .filter(t => {
+        // Apply hasBankDetails filter if specified
+        if (hasBankDetails !== undefined) {
+          return t.has_bank_details === hasBankDetails
+        }
+        return true
+      })
+
+    // Calculate totals
+    const totalPlatformEarnings = teacherEarnings.reduce((sum, t) => sum + t.total_earnings, 0)
+    const teachersWithBankDetails = teacherEarnings.filter(t => t.has_bank_details).length
+    const totalCompletedBookings = teacherEarnings.reduce((sum, t) => sum + t.completed_bookings, 0)
+
+    return {
+      teachers: teacherEarnings,
+      summary: {
+        total_platform_earnings: totalPlatformEarnings,
+        total_teachers: teacherEarnings.length,
+        teachers_with_bank_details: teachersWithBankDetails,
+        teachers_without_bank_details: teacherEarnings.length - teachersWithBankDetails,
+        total_completed_bookings: totalCompletedBookings
+      },
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit)
+      }
+    }
+  }
+
 }

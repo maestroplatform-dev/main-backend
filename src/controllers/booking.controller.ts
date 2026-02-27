@@ -16,7 +16,7 @@ export class BookingController {
         return;
       }
 
-      const { teacherId, scheduledAt, notes } = req.body;
+      const { teacherId, scheduledAt, notes, instrument } = req.body;
 
       if (!teacherId || !scheduledAt) {
         res.status(400).json({ error: "teacherId and scheduledAt are required" });
@@ -27,7 +27,8 @@ export class BookingController {
         studentId,
         teacherId,
         new Date(scheduledAt),
-        notes
+        notes,
+        instrument
       );
 
       res.status(201).json({

@@ -288,4 +288,24 @@ export class AdminController {
     })
   }
 
+  // GET /api/v1/admin/sessions - Get scheduled demos and sessions
+  static async getSessionBookings(req: AuthRequest, res: Response): Promise<void> {
+    const result = await AdminService.getSessionBookings({
+      type: req.query.type as string,
+      status: req.query.status as string,
+      dateFrom: req.query.dateFrom as string,
+      dateTo: req.query.dateTo as string,
+      teacherId: req.query.teacherId as string,
+      studentId: req.query.studentId as string,
+      search: req.query.search as string,
+      page: parseInt(req.query.page as string) || 1,
+      limit: parseInt(req.query.limit as string) || 50,
+    })
+
+    res.json({
+      success: true,
+      data: result,
+    })
+  }
+
 }

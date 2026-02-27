@@ -1105,4 +1105,201 @@ export class AdminService {
     }
   }
 
+  // Get scheduled demos and sessions for admin
+  static async getSessionBookings(params: {
+    type?: string
+    status?: string
+    dateFrom?: string
+    dateTo?: string
+    teacherId?: string
+    studentId?: string
+    search?: string
+    page?: number
+    limit?: number
+  }) {
+    const {
+      type,
+      status,
+      dateFrom,
+      dateTo,
+      teacherId,
+      studentId,
+      search,
+      page = 1,
+      limit = 50,
+    } = params
+
+    const where: any = {}
+
+    if (type === 'demo') where.is_demo = true
+    if (type === 'session') where.is_demo = false
+
+    if (status) {
+      where.status = status
+    }
+
+    if (dateFrom || dateTo) {
+      where.scheduled_at = {}
+      if (dateFrom) where.scheduled_at.gte = new Date(dateFrom)
+      if (dateTo) where.scheduled_at.lte = new Date(dateTo)
+    }
+
+    if (teacherId) {
+      where.teacher_id = teacherId
+    }
+
+    if (studentId) {
+      where.student_id = studentId
+    }
+
+    if (search) {
+      where.OR = [
+        { students: { name: { contains: search, mode: 'insensitive' } } },
+        { teachers: { name: { contains: search, mode: 'insensitive' } } },
+      ]
+    }
+
+    const [bookings, total, demoCount, sessionCount, statusBreakdown] = await Promise.all([
+      prisma.bookings.findMany({
+        where,
+        include: {
+          students: {
+            select: {
+              id: true,
+              name: true,
+              profiles: {
+                select: {
+                  name: true,
+                },
+              },
+            },
+          },
+          teachers: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+          purchased_packages: {
+            select: {
+              instrument: true,
+              level: true,
+              mode: true,
+            },
+          },
+        },
+        orderBy: {
+          scheduled_at: 'desc',
+        },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      prisma.bookings.count({ where }),
+      prisma.bookings.count({ where: { ...where, is_demo: true } }),
+      prisma.bookings.count({ where: { ...where, is_demo: false } }),
+      prisma.bookings.groupBy({
+        by: ['status'],
+        where,
+        _count: true,
+      }),
+    ])
+
+    const missingInstrumentPairs = Array.from(
+      new Set(
+        bookings
+          .filter((booking) => !booking.purchased_packages?.instrument)
+          .map((booking) => `${booking.student_id}:${booking.teacher_id}`)
+      )
+    )
+
+    const pairInstrumentMap = new Map<string, string>()
+
+    if (missingInstrumentPairs.length > 0) {
+      const pairFilters = missingInstrumentPairs.map((pair) => {
+        const [student_id, teacher_id] = pair.split(':')
+        return { student_id, teacher_id }
+      })
+
+      const historicalBookings = await prisma.bookings.findMany({
+        where: {
+          OR: pairFilters,
+          purchased_packages: {
+            instrument: {
+              not: null,
+            },
+          },
+        },
+        include: {
+          purchased_packages: {
+            select: {
+              instrument: true,
+            },
+          },
+        },
+        orderBy: {
+          scheduled_at: 'desc',
+        },
+      })
+
+      for (const booking of historicalBookings) {
+        const pairKey = `${booking.student_id}:${booking.teacher_id}`
+        const instrument = booking.purchased_packages?.instrument
+        if (instrument && !pairInstrumentMap.has(pairKey)) {
+          pairInstrumentMap.set(pairKey, instrument)
+        }
+      }
+    }
+
+    return {
+      bookings: bookings.map((booking) => {
+        const pairKey = `${booking.student_id}:${booking.teacher_id}`
+        const bookingTypeInstrument = booking.booking_type.startsWith('demo:')
+          ? booking.booking_type.slice('demo:'.length).trim() || null
+          : null
+        const resolvedInstrument =
+          booking.purchased_packages?.instrument || pairInstrumentMap.get(pairKey) || bookingTypeInstrument || null
+
+        return {
+          id: booking.id,
+          type: booking.is_demo ? 'DEMO' : 'SESSION',
+          booking_type: booking.booking_type,
+          status: booking.status,
+          scheduled_at: booking.scheduled_at,
+          duration_minutes: booking.duration_minutes || 30,
+          meeting_link: booking.meeting_link,
+          notes: booking.notes,
+          created_at: booking.created_at,
+          student: {
+            id: booking.students.id,
+            name: booking.students.name || booking.students.profiles?.name || 'Unknown',
+          },
+          teacher: {
+            id: booking.teachers.id,
+            name: booking.teachers.name || 'Unknown',
+          },
+          package: {
+            instrument: resolvedInstrument,
+            level: booking.purchased_packages?.level || null,
+            mode: booking.purchased_packages?.mode || null,
+          },
+        }
+      }),
+      summary: {
+        total,
+        demos: demoCount,
+        sessions: sessionCount,
+        by_status: statusBreakdown.map((item) => ({
+          status: item.status,
+          count: item._count,
+        })),
+      },
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    }
+  }
+
 }

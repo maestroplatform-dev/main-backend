@@ -15,6 +15,7 @@ router.get('/stats', apiLimiter, authenticateUser, requireRole('admin'), asyncHa
 // Financial tracking
 router.get('/payments', apiLimiter, authenticateUser, requireRole('admin'), asyncHandler(AdminController.getPaymentStats))
 router.get('/earnings', apiLimiter, authenticateUser, requireRole('admin'), asyncHandler(AdminController.getTeacherEarnings))
+router.get('/sessions', apiLimiter, authenticateUser, requireRole('admin'), asyncHandler(AdminController.getSessionBookings))
 
 // Teacher management
 router.get('/teachers', apiLimiter, authenticateUser, requireRole('admin'), asyncHandler(AdminController.listTeachers))

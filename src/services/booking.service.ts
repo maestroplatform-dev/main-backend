@@ -196,7 +196,8 @@ export class BookingService {
     studentId: string,
     teacherId: string,
     scheduledAt: Date,
-    notes?: string
+    notes?: string,
+    instrument?: string
   ) {
     // Ensure student record exists
     const student = await prisma.students.findUnique({
@@ -224,7 +225,7 @@ export class BookingService {
       data: {
         student_id: studentId,
         teacher_id: teacherId,
-        booking_type: "demo",
+        booking_type: instrument ? `demo:${instrument}` : "demo",
         status: "PENDING_APPROVAL",
         scheduled_at: scheduledAt,
         duration_minutes: DEMO_DURATION_MINUTES,

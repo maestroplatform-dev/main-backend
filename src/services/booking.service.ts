@@ -7,6 +7,256 @@ const DEMO_DURATION_MINUTES = 30;
 
 export class BookingService {
   /**
+   * Check whether teacher has an overlapping active booking.
+   */
+  async hasTeacherBookingConflict(
+    teacherId: string,
+    scheduledAt: Date,
+    durationMinutes: number,
+    excludeBookingId?: string
+  ): Promise<boolean> {
+    const endTime = new Date(scheduledAt.getTime() + durationMinutes * 60 * 1000);
+
+    const existingBooking = await prisma.bookings.findFirst({
+      where: {
+        teacher_id: teacherId,
+        ...(excludeBookingId ? { id: { not: excludeBookingId } } : {}),
+        scheduled_at: {
+          lt: endTime,
+        },
+        status: {
+          in: ["PENDING_APPROVAL", "SCHEDULED", "RESCHEDULE_PROPOSED"],
+        },
+        AND: {
+          scheduled_at: {
+            gte: new Date(scheduledAt.getTime() - 12 * 60 * 60 * 1000),
+          },
+        },
+      },
+      select: {
+        scheduled_at: true,
+        duration_minutes: true,
+      },
+    });
+
+    if (!existingBooking) {
+      return false;
+    }
+
+    const bookingEnd = new Date(
+      existingBooking.scheduled_at.getTime() +
+        (existingBooking.duration_minutes || 60) * 60 * 1000
+    );
+
+    return scheduledAt < bookingEnd && endTime > existingBooking.scheduled_at;
+  }
+
+  /**
+   * Get students who have purchased packages with this teacher,
+   * including students with no bookings yet.
+   */
+  async getTeacherPackageStudents(teacherId: string) {
+    const purchasedPackages = await prisma.purchased_packages.findMany({
+      where: {
+        teacher_id: teacherId,
+        status: "ACTIVE",
+      },
+      include: {
+        students: {
+          select: {
+            id: true,
+            name: true,
+            profile_picture_url: true,
+            date_of_birth: true,
+          },
+        },
+      },
+      orderBy: {
+        purchased_at: "desc",
+      },
+    });
+
+    if (purchasedPackages.length === 0) {
+      return [];
+    }
+
+    const studentIds = Array.from(new Set(purchasedPackages.map((p) => p.student_id)));
+
+    const [profiles, bookings] = await Promise.all([
+      prisma.profiles.findMany({
+        where: { id: { in: studentIds } },
+        select: { id: true, name: true },
+      }),
+      prisma.bookings.findMany({
+        where: {
+          teacher_id: teacherId,
+          student_id: { in: studentIds },
+          status: { not: "CANCELLED" },
+        },
+        select: {
+          id: true,
+          student_id: true,
+          status: true,
+          scheduled_at: true,
+          rescheduled_at: true,
+        },
+      }),
+    ]);
+
+    const profileNameById = new Map(profiles.map((p) => [p.id, p.name]));
+    const bookingsByStudent = new Map<string, typeof bookings>();
+    for (const booking of bookings) {
+      const list = bookingsByStudent.get(booking.student_id) || [];
+      list.push(booking);
+      bookingsByStudent.set(booking.student_id, list);
+    }
+
+    const packageByStudent = new Map<string, (typeof purchasedPackages)[number]>();
+    for (const purchasedPackage of purchasedPackages) {
+      if (!packageByStudent.has(purchasedPackage.student_id)) {
+        packageByStudent.set(purchasedPackage.student_id, purchasedPackage);
+      }
+    }
+
+    return Array.from(packageByStudent.values()).map((purchasedPackage) => {
+      const studentBookings = bookingsByStudent.get(purchasedPackage.student_id) || [];
+      const now = new Date();
+      const upcomingBooking = studentBookings
+        .filter((booking) => {
+          const bookingDate =
+            booking.status === "RESCHEDULE_PROPOSED" && booking.rescheduled_at
+              ? booking.rescheduled_at
+              : booking.scheduled_at;
+          return bookingDate > now;
+        })
+        .sort((a, b) => {
+          const aDate = a.status === "RESCHEDULE_PROPOSED" && a.rescheduled_at ? a.rescheduled_at : a.scheduled_at;
+          const bDate = b.status === "RESCHEDULE_PROPOSED" && b.rescheduled_at ? b.rescheduled_at : b.scheduled_at;
+          return aDate.getTime() - bDate.getTime();
+        })[0];
+
+      const dateOfBirth = purchasedPackage.students.date_of_birth;
+      const age = dateOfBirth
+        ? Math.floor(
+            (Date.now() - new Date(dateOfBirth).getTime()) /
+              (365.25 * 24 * 60 * 60 * 1000)
+          )
+        : 0;
+
+      return {
+        id: purchasedPackage.student_id,
+        name:
+          purchasedPackage.students.name ||
+          profileNameById.get(purchasedPackage.student_id) ||
+          "Unknown Student",
+        avatar: purchasedPackage.students.profile_picture_url,
+        age,
+        instrument: purchasedPackage.instrument || "Music",
+        learningStage: "Intermediate",
+        mode: purchasedPackage.mode === "offline" ? "offline" : "online",
+        status: purchasedPackage.classes_remaining > 0 ? "active" : "inactive",
+        nextClassAt: upcomingBooking
+          ? (
+              upcomingBooking.status === "RESCHEDULE_PROPOSED" && upcomingBooking.rescheduled_at
+                ? upcomingBooking.rescheduled_at
+                : upcomingBooking.scheduled_at
+            ).toISOString()
+          : null,
+        purchasedPackageId: purchasedPackage.id,
+        packageStatus: purchasedPackage.status,
+        classesRemaining: purchasedPackage.classes_remaining,
+        classesTotal: purchasedPackage.classes_total,
+        hasBookings: studentBookings.length > 0,
+      };
+    });
+  }
+
+  /**
+   * Teacher initiates scheduling for a student's purchased package.
+   */
+  async scheduleSessionByTeacher(
+    teacherId: string,
+    studentId: string,
+    purchasedPackageId: string,
+    scheduledAt: Date,
+    durationMinutes: number = 60
+  ) {
+    const purchasedPackage = await prisma.purchased_packages.findUnique({
+      where: { id: purchasedPackageId },
+    });
+
+    if (!purchasedPackage) {
+      throw new Error("Package not found");
+    }
+
+    if (purchasedPackage.teacher_id !== teacherId) {
+      throw new Error("Unauthorized package access");
+    }
+
+    if (purchasedPackage.student_id !== studentId) {
+      throw new Error("Selected package does not belong to this student");
+    }
+
+    if (purchasedPackage.status !== "ACTIVE") {
+      throw new Error("Package is not active");
+    }
+
+    const bookedSessions = await prisma.bookings.count({
+      where: {
+        purchased_package_id: purchasedPackageId,
+        status: { notIn: ["CANCELLED"] },
+      },
+    });
+
+    if (bookedSessions >= purchasedPackage.classes_total) {
+      throw new Error("All sessions from this package have been booked");
+    }
+
+    const hasConflict = await this.hasTeacherBookingConflict(
+      teacherId,
+      scheduledAt,
+      durationMinutes
+    );
+    if (hasConflict) {
+      throw new Error("This time slot conflicts with another booking. Please choose a different time.");
+    }
+
+    const meetingId = nanoid(12);
+    const meetingLink = `https://meet.jit.si/Maestera-Session-${meetingId}`;
+
+    const booking = await prisma.bookings.create({
+      data: {
+        student_id: studentId,
+        teacher_id: teacherId,
+        purchased_package_id: purchasedPackageId,
+        package_id: purchasedPackage.package_id,
+        booking_type: "package_session",
+        status: "SCHEDULED",
+        scheduled_at: scheduledAt,
+        duration_minutes: durationMinutes,
+        is_demo: false,
+        meeting_link: meetingLink,
+      },
+      include: {
+        students: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        teachers: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+    });
+
+    return booking;
+  }
+
+  /**
    * Schedule a session from a purchased package
    */
   async schedulePackageSession(
@@ -155,37 +405,13 @@ export class BookingService {
       return false;
     }
 
-    // Check for existing bookings that overlap
-    const existingBooking = await prisma.bookings.findFirst({
-      where: {
-        teacher_id: teacherId,
-        scheduled_at: {
-          lt: endTime,
-        },
-        status: {
-          in: ["PENDING_APPROVAL", "SCHEDULED", "RESCHEDULE_PROPOSED"],
-        },
-        AND: {
-          scheduled_at: {
-            gte: new Date(scheduledAt.getTime() - 12 * 60 * 60 * 1000), // Check bookings that might overlap
-          },
-        },
-      },
-    });
+    const hasConflict = await this.hasTeacherBookingConflict(
+      teacherId,
+      scheduledAt,
+      durationMinutes
+    );
 
-    if (existingBooking) {
-      // Check if this booking actually overlaps
-      const bookingEnd = new Date(
-        existingBooking.scheduled_at.getTime() + 
-        (existingBooking.duration_minutes || 60) * 60 * 1000
-      );
-      
-      if (scheduledAt < bookingEnd && endTime > existingBooking.scheduled_at) {
-        return false;
-      }
-    }
-
-    return true;
+    return !hasConflict;
   }
 
   /**
@@ -872,6 +1098,7 @@ export class BookingService {
           ? "scheduled" 
           : (booking.status.toLowerCase() as "completed" | "cancelled" | "missed" | "scheduled"),
         notes: booking.notes || undefined,
+        meetingLink: booking.meeting_link || undefined,
       };
     });
 

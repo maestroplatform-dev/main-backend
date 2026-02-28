@@ -15,8 +15,10 @@ router.patch("/:id/confirm-reschedule", bookingController.confirmReschedule.bind
 
 // Teacher routes
 router.get("/teacher", bookingController.getTeacherBookings.bind(bookingController));
+router.get("/teacher/package-students", bookingController.getTeacherPackageStudents.bind(bookingController));
 router.get("/teacher/pending-count", bookingController.getPendingCount.bind(bookingController));
 router.get("/teacher/student/:studentId", bookingController.getStudentProfile.bind(bookingController));
+router.post("/teacher/schedule-session", bookingController.scheduleSessionByTeacher.bind(bookingController));
 router.patch("/:id/accept", bookingController.acceptBooking.bind(bookingController));
 router.patch("/:id/reschedule", bookingController.rescheduleBooking.bind(bookingController));
 router.patch("/:id/complete", bookingController.markBookingCompleted.bind(bookingController));

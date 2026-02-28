@@ -80,6 +80,46 @@ export class BookingController {
   }
 
   /**
+   * POST /api/bookings/teacher/schedule-session
+   * Teacher schedules a package session for a student
+   */
+  async scheduleSessionByTeacher(req: AuthRequest, res: Response) {
+    try {
+      const teacherId = req.user?.id;
+      if (!teacherId) {
+        res.status(401).json({ error: "Unauthorized" });
+        return;
+      }
+
+      const { studentId, purchasedPackageId, scheduledAt, durationMinutes } = req.body;
+
+      if (!studentId || !purchasedPackageId || !scheduledAt) {
+        res
+          .status(400)
+          .json({ error: "studentId, purchasedPackageId and scheduledAt are required" });
+        return;
+      }
+
+      const booking = await bookingService.scheduleSessionByTeacher(
+        teacherId,
+        studentId,
+        purchasedPackageId,
+        new Date(scheduledAt),
+        durationMinutes || 60
+      );
+
+      res.status(201).json({
+        success: true,
+        message: "Session scheduled successfully",
+        data: booking,
+      });
+    } catch (error: any) {
+      console.error("Error scheduling session by teacher:", error);
+      res.status(400).json({ error: error.message || "Failed to schedule session" });
+    }
+  }
+
+  /**
    * GET /api/bookings/teacher
    * Get all bookings for the authenticated teacher
    */
@@ -107,6 +147,30 @@ export class BookingController {
     } catch (error: any) {
       console.error("Error fetching teacher bookings:", error);
       res.status(500).json({ error: "Failed to fetch bookings" });
+    }
+  }
+
+  /**
+   * GET /api/bookings/teacher/package-students
+   * Get students who purchased packages for this teacher
+   */
+  async getTeacherPackageStudents(req: AuthRequest, res: Response) {
+    try {
+      const teacherId = req.user?.id;
+      if (!teacherId) {
+        res.status(401).json({ error: "Unauthorized" });
+        return;
+      }
+
+      const students = await bookingService.getTeacherPackageStudents(teacherId);
+
+      res.json({
+        success: true,
+        data: students,
+      });
+    } catch (error: any) {
+      console.error("Error fetching teacher package students:", error);
+      res.status(500).json({ error: "Failed to fetch package students" });
     }
   }
 

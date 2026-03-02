@@ -149,11 +149,14 @@ export class StudentService {
       }
 
       // Create student record if it doesn't exist
-      let student = await prisma.students.findUnique({
+      const existingStudent = await prisma.students.findUnique({
         where: { id: data.userId },
+        select: { id: true },
       })
 
-      if (student) {
+      let student
+
+      if (existingStudent) {
         // Update existing student record
         student = await prisma.students.update({
           where: { id: data.userId },
@@ -201,8 +204,18 @@ export class StudentService {
   static async getStudentProfile(userId: string) {
     const student = await prisma.students.findUnique({
       where: { id: userId },
-      include: {
-        profiles: true,
+      select: {
+        id: true,
+        name: true,
+        gender: true,
+        date_of_birth: true,
+        profile_picture_url: true,
+        guardian_name: true,
+        guardian_phone: true,
+        signup_method: true,
+        email_verified: true,
+        onboarding_status: true,
+        created_at: true,
       },
     })
 

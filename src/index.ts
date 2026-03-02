@@ -1,6 +1,6 @@
 // Load environment variables FIRST before any other imports
 import dotenv from 'dotenv'
-dotenv.config()
+dotenv.config({ override: true })
 
 import { createServer } from 'http'
 import express, { Application } from 'express'

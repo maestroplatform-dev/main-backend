@@ -112,6 +112,54 @@ Set `ADMIN_CREATION_SECRET` in your `.env` (do not commit `.env`):
 ADMIN_CREATION_SECRET=your-very-secret-value
 ```
 
+## 📲 WhatsApp Notifications (11za)
+
+You can enable activity-based WhatsApp notifications for teachers and students.
+
+```env
+# Enable/disable integration
+WHATSAPP_NOTIFICATIONS_ENABLED=true
+
+# Provider selector (currently supports: 11za)
+WHATSAPP_PROVIDER=11za
+
+# 11za API endpoint and auth
+WHATSAPP_11ZA_API_URL=https://api.11za.example/messages
+WHATSAPP_11ZA_API_KEY=your_11za_api_key
+
+# Optional auth header customization
+WHATSAPP_11ZA_AUTH_HEADER=Authorization
+WHATSAPP_11ZA_AUTH_SCHEME=Bearer
+
+# Optional channel field in payload
+WHATSAPP_11ZA_CHANNEL=whatsapp
+
+# Optional debug mode (logs payloads, does not send)
+WHATSAPP_DRY_RUN=false
+
+# OTP verification settings
+WHATSAPP_11ZA_OTP_TEMPLATE=whatsapp_otp_verification
+WHATSAPP_OTP_SECRET=replace_with_strong_random_secret
+WHATSAPP_OTP_EXPIRY_MINUTES=5
+WHATSAPP_OTP_MAX_ATTEMPTS=5
+WHATSAPP_OTP_RESEND_COOLDOWN_SECONDS=30
+WHATSAPP_OTP_DAILY_LIMIT=10
+```
+
+Current activity events wired:
+- Session scheduled by teacher
+- Session scheduled by student
+- Session rescheduled by teacher/student
+- Session cancelled by teacher/student
+- Package purchased
+
+Verification endpoints:
+- `GET /api/v1/whatsapp/status`
+- `POST /api/v1/whatsapp/request-otp` with `{ phone }`
+- `POST /api/v1/whatsapp/verify-otp` with `{ challengeId, otp }`
+
+WhatsApp activity messages are sent only when number is verified and opt-in is enabled.
+
 ## 🌐 CORS Configuration
 
 Update `ALLOWED_ORIGINS` in `.env` to allow your frontend:

@@ -4,6 +4,7 @@ import { getRazorpayInstance } from '../config/razorpay';
 import prisma from '../config/database';
 import { payment_status, purchase_status, payment_option_type } from '@prisma/client';
 import { computeTotalPrice, computePerClassPrice, buildPricingConfig } from '../utils/pricing';
+import { ActivityNotificationService } from './activity-notification.service';
 
 // Types
 interface SelectedSlot {
@@ -216,7 +217,16 @@ export class PaymentService {
     // Fetch student details
     const student = await prisma.students.findUnique({
       where: { id: student_id },
-      include: { profiles: true }
+      select: {
+        id: true,
+        name: true,
+        guardian_phone: true,
+        profiles: {
+          select: {
+            name: true,
+          },
+        },
+      },
     });
 
     if (!student) {
@@ -459,6 +469,10 @@ export class PaymentService {
         duration_minutes: true
       },
       orderBy: { scheduled_at: 'asc' }
+    });
+
+    void ActivityNotificationService.notifyPackagePurchased(purchased_package_id).catch((error) => {
+      console.error('Failed to send package purchase notification:', error);
     });
 
     return {

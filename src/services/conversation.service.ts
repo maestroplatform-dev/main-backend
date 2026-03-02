@@ -28,6 +28,7 @@ export class ConversationService {
       // Verify student exists
       const student = await prisma.students.findUnique({
         where: { id: studentId },
+        select: { id: true },
       })
       if (!student) {
         throw new AppError(404, 'Student not found', 'STUDENT_NOT_FOUND')

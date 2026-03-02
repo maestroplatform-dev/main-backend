@@ -12,6 +12,7 @@ import featuredTeachersRoutes from './featured-teachers.routes'
 import conversationRoutes from './conversation.routes'
 import supportRoutes from './support.routes'
 import quizResponseRoutes from './quiz-responses.routes'
+import whatsappRoutes from './whatsapp.routes'
 import { authenticateUser } from '../middleware/auth'
 
 const router = Router()
@@ -36,5 +37,6 @@ router.use('/api/v1/conversations', conversationRoutes)
 router.use('/api/v1/support', supportRoutes)
 router.use('/api/v1/quiz-responses', quizResponseRoutes)
 router.use('/api/v1/admin/quiz-responses', quizResponseRoutes)
+router.use('/api/v1/whatsapp', whatsappRoutes)
 
 export default router

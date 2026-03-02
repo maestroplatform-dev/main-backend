@@ -1,6 +1,7 @@
 import prisma from "../config/database";
 import { booking_status } from "@prisma/client";
 import { nanoid } from 'nanoid';
+import { ActivityNotificationService } from "./activity-notification.service";
 
 // Demo class duration in minutes
 const DEMO_DURATION_MINUTES = 30;
@@ -253,6 +254,14 @@ export class BookingService {
       },
     });
 
+    void ActivityNotificationService.notifyBookingActivity({
+      bookingId: booking.id,
+      initiatedBy: "teacher",
+      event: "SESSION_SCHEDULED_BY_TEACHER",
+    }).catch((error) => {
+      console.error("Failed to send schedule notification (teacher-initiated):", error);
+    });
+
     return booking;
   }
 
@@ -372,6 +381,14 @@ export class BookingService {
       },
     });
 
+    void ActivityNotificationService.notifyBookingActivity({
+      bookingId: booking.id,
+      initiatedBy: "student",
+      event: "SESSION_SCHEDULED_BY_STUDENT",
+    }).catch((error) => {
+      console.error("Failed to send schedule notification (student-initiated):", error);
+    });
+
     return booking;
   }
 
@@ -428,6 +445,7 @@ export class BookingService {
     // Ensure student record exists
     const student = await prisma.students.findUnique({
       where: { id: studentId },
+      select: { id: true },
     });
 
     if (!student) {
@@ -804,7 +822,7 @@ export class BookingService {
       }
     }
 
-    return prisma.bookings.update({
+    const updatedBooking = await prisma.bookings.update({
       where: { id: bookingId },
       data: {
         status: "RESCHEDULE_PROPOSED",
@@ -821,6 +839,21 @@ export class BookingService {
         },
       },
     });
+
+    const initiatedBy = booking.teacher_id === userId ? "teacher" : "student";
+    const event = initiatedBy === "teacher"
+      ? "SESSION_RESCHEDULED_BY_TEACHER"
+      : "SESSION_RESCHEDULED_BY_STUDENT";
+
+    void ActivityNotificationService.notifyBookingActivity({
+      bookingId: updatedBooking.id,
+      initiatedBy,
+      event,
+    }).catch((error) => {
+      console.error("Failed to send reschedule notification:", error);
+    });
+
+    return updatedBooking;
   }
 
   /**
@@ -964,13 +997,28 @@ export class BookingService {
       throw new Error("Booking cannot be cancelled in current status");
     }
 
-    return prisma.bookings.update({
+    const cancelledBooking = await prisma.bookings.update({
       where: { id: bookingId },
       data: {
         status: "CANCELLED",
         updated_at: new Date(),
       },
     });
+
+    const initiatedBy = booking.teacher_id === userId ? "teacher" : "student";
+    const event = initiatedBy === "teacher"
+      ? "SESSION_CANCELLED_BY_TEACHER"
+      : "SESSION_CANCELLED_BY_STUDENT";
+
+    void ActivityNotificationService.notifyBookingActivity({
+      bookingId: cancelledBooking.id,
+      initiatedBy,
+      event,
+    }).catch((error) => {
+      console.error("Failed to send cancel notification:", error);
+    });
+
+    return cancelledBooking;
   }
 
   /**
@@ -1004,6 +1052,14 @@ export class BookingService {
     // Get student info with profile for email
     const student = await prisma.students.findUnique({
       where: { id: studentId },
+      select: {
+        id: true,
+        name: true,
+        date_of_birth: true,
+        profile_picture_url: true,
+        guardian_name: true,
+        guardian_phone: true,
+      },
     });
 
     if (!student) {

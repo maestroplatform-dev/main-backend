@@ -21,6 +21,7 @@ export class StudentPreferencesService {
       // Check if student exists
       const student = await prisma.students.findUnique({
         where: { id: studentId },
+        select: { id: true },
       })
 
       if (!student) {

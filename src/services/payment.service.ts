@@ -59,6 +59,11 @@ interface VerifyPaymentRequest {
   purchased_package_id: string;
 }
 
+interface MarkCheckoutAbandonedRequest {
+  razorpay_order_id: string;
+  purchased_package_id: string;
+}
+
 interface VerifyPaymentResponse {
   success: boolean;
   message: string;
@@ -76,18 +81,88 @@ interface VerifyPaymentResponse {
 }
 
 export class PaymentService {
+  private async markPendingPackageFailed(purchasedPackageId: string, reason: string) {
+    const successfulPayments = await prisma.purchase_payments.count({
+      where: {
+        purchased_package_id: purchasedPackageId,
+        status: 'SUCCESS',
+      },
+    });
+
+    if (successfulPayments > 0) {
+      return;
+    }
+
+    await prisma.purchased_packages.updateMany({
+      where: {
+        id: purchasedPackageId,
+        status: 'PENDING',
+      },
+      data: {
+        status: 'FAILED',
+      },
+    });
+
+    await prisma.bookings.updateMany({
+      where: {
+        purchased_package_id: purchasedPackageId,
+        status: 'SCHEDULED',
+      },
+      data: {
+        status: 'CANCELLED',
+      },
+    });
+  }
+
   /**
    * Validates that a student doesn't already have an active package with the same teacher
    */
   async validateNoExistingPackage(studentId: string, teacherId: string): Promise<boolean> {
+    const now = new Date();
+
+    // Mark elapsed packages as EXPIRED so they don't block new purchases
+    await prisma.purchased_packages.updateMany({
+      where: {
+        student_id: studentId,
+        teacher_id: teacherId,
+        status: {
+          in: ['ACTIVE', 'PAUSED']
+        },
+        expires_at: {
+          lt: now,
+        },
+      },
+      data: {
+        status: 'EXPIRED',
+      },
+    });
+
+    // Mark fully consumed active packages as COMPLETED so they don't block repurchase
+    await prisma.purchased_packages.updateMany({
+      where: {
+        student_id: studentId,
+        teacher_id: teacherId,
+        status: 'ACTIVE',
+        classes_remaining: {
+          lte: 0,
+        },
+      },
+      data: {
+        status: 'COMPLETED',
+      },
+    });
+
     const existingPackage = await prisma.purchased_packages.findFirst({
       where: {
         student_id: studentId,
         teacher_id: teacherId,
         status: {
-          in: ['PENDING', 'ACTIVE']
-        }
-      }
+          notIn: ['CANCELLED', 'FAILED', 'EXPIRED', 'COMPLETED']
+        },
+      },
+      select: {
+        id: true,
+      },
     });
 
     return !existingPackage;
@@ -376,6 +451,7 @@ export class PaymentService {
         where: { razorpay_order_id },
         data: { status: 'FAILED' }
       });
+      await this.markPendingPackageFailed(purchased_package_id, 'invalid_signature');
       throw new Error('Payment verification failed - invalid signature');
     }
 
@@ -415,6 +491,7 @@ export class PaymentService {
         where: { id: paymentRecord.id },
         data: { status: 'FAILED', metadata: { error: 'Amount mismatch', expected: paymentRecord.amount, received: paidAmount } }
       });
+      await this.markPendingPackageFailed(purchased_package_id, 'amount_mismatch');
       throw new Error('Payment amount mismatch');
     }
 
@@ -495,6 +572,50 @@ export class PaymentService {
         };
       })
     };
+  }
+
+  async markCheckoutAbandoned(data: MarkCheckoutAbandonedRequest, studentId: string) {
+    const { razorpay_order_id, purchased_package_id } = data;
+
+    const purchasedPackage = await prisma.purchased_packages.findUnique({
+      where: { id: purchased_package_id },
+      select: {
+        id: true,
+        student_id: true,
+        status: true,
+      },
+    });
+
+    if (!purchasedPackage) {
+      throw new Error('Package not found');
+    }
+
+    if (purchasedPackage.student_id !== studentId) {
+      throw new Error('Unauthorized');
+    }
+
+    if (purchasedPackage.status !== 'PENDING') {
+      return { success: true, message: 'No pending package to cancel' };
+    }
+
+    await prisma.purchase_payments.updateMany({
+      where: {
+        purchased_package_id,
+        razorpay_order_id,
+        status: 'PENDING',
+      },
+      data: {
+        status: 'FAILED',
+        metadata: {
+          error: 'Checkout dismissed by user',
+          dismissed_at: new Date().toISOString(),
+        },
+      },
+    });
+
+    await this.markPendingPackageFailed(purchased_package_id, 'checkout_dismissed');
+
+    return { success: true, message: 'Pending checkout marked as failed' };
   }
 
   /**

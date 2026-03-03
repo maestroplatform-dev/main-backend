@@ -19,6 +19,9 @@ router.post('/create-order', paymentController.createOrder.bind(paymentControlle
 // Verify payment after Razorpay checkout
 router.post('/verify-payment', paymentController.verifyPayment.bind(paymentController));
 
+// Mark checkout as dismissed/failed when user closes Razorpay modal
+router.post('/checkout-dismissed', paymentController.checkoutDismissed.bind(paymentController));
+
 // Create next tranche payment for flexible option
 router.post('/create-next-payment', paymentController.createNextTranchePayment.bind(paymentController));
 

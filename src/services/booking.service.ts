@@ -1131,20 +1131,24 @@ export class BookingService {
       const displayDate = booking.status === "RESCHEDULE_PROPOSED" && booking.rescheduled_at 
         ? booking.rescheduled_at 
         : booking.scheduled_at;
+      const displayStart = new Date(displayDate);
+      const displayEnd = new Date(displayStart.getTime() + (booking.duration_minutes || 60) * 60000);
       
       return {
         id: booking.id,
-        date: new Date(displayDate).toLocaleDateString("en-US", {
+        starts_at: displayStart.toISOString(),
+        ends_at: displayEnd.toISOString(),
+        date: displayStart.toLocaleDateString("en-US", {
           weekday: "short",
           day: "numeric",
           month: "short",
           year: "numeric",
         }),
-        time: `${new Date(displayDate).toLocaleTimeString("en-US", {
+        time: `${displayStart.toLocaleTimeString("en-US", {
           hour: "numeric",
           minute: "2-digit",
           hour12: true,
-        })} - ${new Date(new Date(displayDate).getTime() + (booking.duration_minutes || 60) * 60000).toLocaleTimeString("en-US", {
+        })} - ${displayEnd.toLocaleTimeString("en-US", {
           hour: "numeric",
           minute: "2-digit",
           hour12: true,
@@ -1178,6 +1182,18 @@ export class BookingService {
       attendance,
       nextClass: nextBooking
         ? {
+            starts_at: new Date(
+              nextBooking.status === "RESCHEDULE_PROPOSED" && nextBooking.rescheduled_at
+                ? nextBooking.rescheduled_at
+                : nextBooking.scheduled_at
+            ).toISOString(),
+            ends_at: new Date(
+              new Date(
+                nextBooking.status === "RESCHEDULE_PROPOSED" && nextBooking.rescheduled_at
+                  ? nextBooking.rescheduled_at
+                  : nextBooking.scheduled_at
+              ).getTime() + (nextBooking.duration_minutes || 60) * 60000
+            ).toISOString(),
             date: new Date(nextBooking.status === "RESCHEDULE_PROPOSED" && nextBooking.rescheduled_at 
               ? nextBooking.rescheduled_at 
               : nextBooking.scheduled_at).toLocaleDateString("en-US", {

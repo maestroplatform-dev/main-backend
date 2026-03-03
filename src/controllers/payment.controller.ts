@@ -34,6 +34,11 @@ interface VerifyPaymentBody {
   purchase_id: string;
 }
 
+interface CheckoutDismissedBody {
+  razorpay_order_id: string;
+  purchase_id: string;
+}
+
 interface CreateNextPaymentBody {
   purchased_package_id: string;
 }
@@ -170,6 +175,41 @@ export class PaymentController {
   }
 
   /**
+   * POST /api/v1/payments/checkout-dismissed
+   * Marks abandoned Razorpay checkout as failed so user can retry immediately
+   */
+  async checkoutDismissed(req: Request<{}, {}, CheckoutDismissedBody>, res: Response) {
+    try {
+      const userId = (req as any).user?.id;
+      if (!userId) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+
+      const { razorpay_order_id, purchase_id } = req.body;
+
+      if (!razorpay_order_id || !purchase_id) {
+        return res.status(400).json({ error: 'Missing required fields' });
+      }
+
+      const result = await paymentService.markCheckoutAbandoned({
+        razorpay_order_id,
+        purchased_package_id: purchase_id,
+      }, userId);
+
+      return res.status(200).json({
+        success: true,
+        data: result,
+      });
+    } catch (error: any) {
+      console.error('❌ Error marking checkout dismissed:', error);
+      return res.status(400).json({
+        success: false,
+        error: error.message || 'Failed to update checkout status',
+      });
+    }
+  }
+
+  /**
    * POST /api/v1/payments/create-next-payment
    * Creates order for next tranche of flexible payments
    */
@@ -248,6 +288,10 @@ export class PaymentController {
         })),
         bookings: (pkg.bookings || []).map(b => ({
           id: b.id,
+          starts_at: b.scheduled_at?.toISOString() || null,
+          ends_at: b.scheduled_at
+            ? new Date(b.scheduled_at.getTime() + (b.duration_minutes || 60) * 60000).toISOString()
+            : null,
           date: b.scheduled_at?.toISOString().split('T')[0] || '',
           start_time: b.scheduled_at?.toISOString().split('T')[1]?.substring(0, 5) || '',
           end_time: '',
@@ -331,6 +375,10 @@ export class PaymentController {
         })),
         bookings: (pkg.bookings || []).map(b => ({
           id: b.id,
+          starts_at: b.scheduled_at?.toISOString() || null,
+          ends_at: b.scheduled_at
+            ? new Date(b.scheduled_at.getTime() + (b.duration_minutes || 60) * 60000).toISOString()
+            : null,
           date: b.scheduled_at?.toISOString().split('T')[0] || '',
           start_time: b.scheduled_at?.toISOString().split('T')[1]?.substring(0, 5) || '',
           end_time: '',

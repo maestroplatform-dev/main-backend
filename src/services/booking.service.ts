@@ -1037,7 +1037,18 @@ export class BookingService {
    * Get student profile with class history for a teacher
    */
   async getStudentProfileForTeacher(teacherId: string, studentId: string) {
-    // Verify teacher has bookings with this student
+    const teacherPackage = await prisma.purchased_packages.findFirst({
+      where: {
+        teacher_id: teacherId,
+        student_id: studentId,
+        status: {
+          in: ["ACTIVE", "PAUSED"],
+        },
+      },
+      orderBy: { purchased_at: "desc" },
+    });
+
+    // Verify teacher has either package relation or booking relation with this student
     const hasBookings = await prisma.bookings.findFirst({
       where: {
         teacher_id: teacherId,
@@ -1045,7 +1056,7 @@ export class BookingService {
       },
     });
 
-    if (!hasBookings) {
+    if (!teacherPackage && !hasBookings) {
       throw new Error("Student not found or no bookings with this teacher");
     }
 
@@ -1077,12 +1088,13 @@ export class BookingService {
       where: {
         teacher_id: teacherId,
         student_id: studentId,
+        ...(teacherPackage ? { purchased_package_id: teacherPackage.id } : {}),
       },
       orderBy: { scheduled_at: "desc" },
     });
 
-    // Exclude demo bookings from stats (they don't consume package slots)
-    const packageBookings = bookings.filter(b => !b.is_demo);
+    // Exclude demo/cancelled bookings from slot consumption stats
+    const packageBookings = bookings.filter((b) => !b.is_demo && b.status !== "CANCELLED");
 
     // Calculate stats (only for package bookings)
     const completedBookings = packageBookings.filter(b => b.status === "COMPLETED");
@@ -1098,30 +1110,10 @@ export class BookingService {
       .filter(b => new Date(b.scheduled_at) > now)
       .sort((a, b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime())[0];
 
-    // Get package progress if any
-    const purchasedPackages = await prisma.purchased_packages.findMany({
-      where: {
-        student_id: studentId,
-        status: "ACTIVE",
-      },
-      include: {
-        class_packages: {
-          select: {
-            classes_count: true,
-            teacher_id: true,
-          },
-        },
-      },
-    });
-
-    const teacherPackage = purchasedPackages.find(
-      p => p.class_packages?.teacher_id === teacherId
-    );
-
     const packageProgress = teacherPackage
       ? {
           completed: teacherPackage.classes_completed || 0,
-          total: teacherPackage.class_packages?.classes_count || 0,
+          total: teacherPackage.classes_total || 0,
         }
       : { completed: 0, total: 0 };
 
@@ -1154,9 +1146,10 @@ export class BookingService {
           hour12: true,
         })}`,
         topic: booking.is_demo ? "Demo Session" : "Class Session",
-        status: booking.status === "RESCHEDULE_PROPOSED" 
-          ? "scheduled" 
+        status: booking.status === "RESCHEDULE_PROPOSED"
+          ? "reschedule_proposed"
           : (booking.status.toLowerCase() as "completed" | "cancelled" | "missed" | "scheduled"),
+        rescheduled_by: booking.rescheduled_by || null,
         notes: booking.notes || undefined,
         meetingLink: booking.meeting_link || undefined,
       };
@@ -1178,6 +1171,7 @@ export class BookingService {
       guardianName: student.guardian_name || undefined,
       guardianPhone: student.guardian_phone || undefined,
       guardianEmail: undefined, // Not in schema
+      purchasedPackageId: teacherPackage?.id,
       packageProgress,
       attendance,
       nextClass: nextBooking

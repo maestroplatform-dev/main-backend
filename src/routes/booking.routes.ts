@@ -22,6 +22,7 @@ router.post("/teacher/schedule-session", bookingController.scheduleSessionByTeac
 router.patch("/:id/accept", bookingController.acceptBooking.bind(bookingController));
 router.patch("/:id/reschedule", bookingController.rescheduleBooking.bind(bookingController));
 router.patch("/:id/complete", bookingController.markBookingCompleted.bind(bookingController));
+router.patch("/:id/absent", bookingController.markBookingAbsent.bind(bookingController));
 
 // Shared routes
 router.get("/:id", bookingController.getBookingById.bind(bookingController));

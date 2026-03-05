@@ -16,17 +16,29 @@ interface WhatsAppNotificationInput {
   variables: Record<string, string | number | boolean | null | undefined>;
 }
 
-const TEMPLATE_MAP: Record<ActivityEvent, string> = {
-  SESSION_SCHEDULED_BY_TEACHER: "session_scheduled_by_teacher",
-  SESSION_SCHEDULED_BY_STUDENT: "session_scheduled_by_student",
-  SESSION_RESCHEDULED_BY_TEACHER: "session_rescheduled_by_teacher",
-  SESSION_RESCHEDULED_BY_STUDENT: "session_rescheduled_by_student",
+const TEMPLATE_MAP: Record<Exclude<ActivityEvent,
+  | "SESSION_SCHEDULED_BY_TEACHER"
+  | "SESSION_SCHEDULED_BY_STUDENT"
+  | "SESSION_RESCHEDULED_BY_TEACHER"
+  | "SESSION_RESCHEDULED_BY_STUDENT">, string> = {
   SESSION_CANCELLED_BY_TEACHER: "session_cancelled_by_teacher",
   SESSION_CANCELLED_BY_STUDENT: "session_cancelled_by_student",
   PACKAGE_PURCHASED: "package_purchased",
 };
 
 export class WhatsAppNotificationService {
+  private static getTemplateName(event: ActivityEvent): string {
+    if (event === "SESSION_SCHEDULED_BY_TEACHER" || event === "SESSION_SCHEDULED_BY_STUDENT") {
+      return process.env.WHATSAPP_11ZA_TEMPLATE_SESSION_SCHEDULED || "session_scheduled";
+    }
+
+    if (event === "SESSION_RESCHEDULED_BY_TEACHER" || event === "SESSION_RESCHEDULED_BY_STUDENT") {
+      return process.env.WHATSAPP_11ZA_TEMPLATE_SESSION_RESCHEDULED || "session_rescheduled";
+    }
+
+    return TEMPLATE_MAP[event as keyof typeof TEMPLATE_MAP];
+  }
+
   private static isEnabled() {
     return process.env.WHATSAPP_NOTIFICATIONS_ENABLED === "true";
   }
@@ -190,7 +202,7 @@ export class WhatsAppNotificationService {
       return;
     }
 
-    const templateName = TEMPLATE_MAP[input.event];
+    const templateName = this.getTemplateName(input.event);
     const variableValues = Object.values(input.variables)
       .filter((value) => value !== undefined && value !== null)
       .map((value) => String(value));

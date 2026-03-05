@@ -174,6 +174,7 @@ export class BookingService {
 
   /**
    * Teacher initiates scheduling for a student's purchased package.
+   * Session stays in PENDING_APPROVAL until the student accepts.
    */
   async scheduleSessionByTeacher(
     teacherId: string,
@@ -232,7 +233,7 @@ export class BookingService {
         purchased_package_id: purchasedPackageId,
         package_id: purchasedPackage.package_id,
         booking_type: "package_session",
-        status: "SCHEDULED",
+        status: "PENDING_APPROVAL",
         scheduled_at: scheduledAt,
         duration_minutes: durationMinutes,
         is_demo: false,
@@ -718,9 +719,9 @@ export class BookingService {
   }
 
   /**
-   * Teacher accepts a demo request
+   * Counterparty accepts a pending booking request
    */
-  async acceptBooking(bookingId: string, teacherId: string) {
+  async acceptBooking(bookingId: string, userId: string) {
     const booking = await prisma.bookings.findUnique({
       where: { id: bookingId },
     });
@@ -729,7 +730,10 @@ export class BookingService {
       throw new Error("Booking not found");
     }
 
-    if (booking.teacher_id !== teacherId) {
+    const isTeacher = booking.teacher_id === userId;
+    const isStudent = booking.student_id === userId;
+
+    if (!isTeacher && !isStudent) {
       throw new Error("Unauthorized");
     }
 
@@ -737,9 +741,23 @@ export class BookingService {
       throw new Error("Booking cannot be accepted in current status");
     }
 
+    if (booking.booking_type === "demo" && !isTeacher) {
+      throw new Error("Only teacher can accept demo requests");
+    }
+
+    if (booking.booking_type !== "demo") {
+      const teacherInitiated = Boolean(booking.meeting_link);
+      if (teacherInitiated && !isStudent) {
+        throw new Error("Only student can accept this session request");
+      }
+      if (!teacherInitiated && !isTeacher) {
+        throw new Error("Only teacher can accept this session request");
+      }
+    }
+
     // Generate meeting link for the session
     const meetingId = nanoid(12);
-    const meetingLink = `https://meet.jit.si/Maestera-Session-${meetingId}`;
+    const meetingLink = booking.meeting_link || `https://meet.jit.si/Maestera-Session-${meetingId}`;
 
     return prisma.bookings.update({
       where: { id: bookingId },
@@ -977,6 +995,75 @@ export class BookingService {
   }
 
   /**
+   * Teacher marks a class as absent (attendance)
+   */
+  async markBookingAbsent(bookingId: string, teacherId: string) {
+    const booking = await prisma.bookings.findUnique({
+      where: { id: bookingId },
+    });
+
+    if (!booking) {
+      throw new Error("Booking not found");
+    }
+
+    if (booking.teacher_id !== teacherId) {
+      throw new Error("Unauthorized");
+    }
+
+    if ((booking.status as string) === "ABSENT") {
+      throw new Error("Booking is already marked as absent");
+    }
+
+    if (booking.status !== "SCHEDULED") {
+      throw new Error("Only scheduled classes can be marked as absent");
+    }
+
+    if (new Date(booking.scheduled_at) > new Date()) {
+      throw new Error("You can only mark attendance for classes that have already started");
+    }
+
+    return prisma.$transaction(async (tx) => {
+      const updatedBooking = await tx.bookings.update({
+        where: { id: bookingId },
+        data: {
+          status: "ABSENT" as any,
+          updated_at: new Date(),
+        },
+        include: {
+          students: {
+            select: { id: true, name: true },
+          },
+          teachers: {
+            select: { id: true, name: true },
+          },
+        },
+      });
+
+      if (booking.purchased_package_id) {
+        const purchasedPackage = await tx.purchased_packages.findUnique({
+          where: { id: booking.purchased_package_id },
+          select: {
+            id: true,
+            classes_completed: true,
+            classes_total: true,
+          },
+        });
+
+        if (purchasedPackage && purchasedPackage.classes_completed < purchasedPackage.classes_total) {
+          await tx.purchased_packages.update({
+            where: { id: purchasedPackage.id },
+            data: {
+              classes_completed: { increment: 1 },
+            },
+          });
+        }
+      }
+
+      return updatedBooking;
+    });
+  }
+
+  /**
    * Cancel a booking (by either party)
    */
   async cancelBooking(bookingId: string, userId: string) {
@@ -1148,7 +1235,7 @@ export class BookingService {
         topic: booking.is_demo ? "Demo Session" : "Class Session",
         status: booking.status === "RESCHEDULE_PROPOSED"
           ? "reschedule_proposed"
-          : (booking.status.toLowerCase() as "completed" | "cancelled" | "missed" | "scheduled"),
+          : (booking.status.toLowerCase() as "completed" | "cancelled" | "missed" | "scheduled" | "pending_approval" | "absent"),
         rescheduled_by: booking.rescheduled_by || null,
         notes: booking.notes || undefined,
         meetingLink: booking.meeting_link || undefined,

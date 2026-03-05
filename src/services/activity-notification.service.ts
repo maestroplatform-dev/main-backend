@@ -4,6 +4,7 @@ import {
   RecipientRole,
   WhatsAppNotificationService,
 } from "./whatsapp-notification.service";
+import { queueEmail } from "./email-queue.service";
 
 interface BookingNotificationOptions {
   bookingId: string;
@@ -18,6 +19,13 @@ interface BookingNotificationOptions {
 }
 
 export class ActivityNotificationService {
+  private static SCHEDULE_OR_RESCHEDULE_EVENTS: ReadonlySet<BookingNotificationOptions["event"]> = new Set([
+    "SESSION_SCHEDULED_BY_TEACHER",
+    "SESSION_SCHEDULED_BY_STUDENT",
+    "SESSION_RESCHEDULED_BY_TEACHER",
+    "SESSION_RESCHEDULED_BY_STUDENT",
+  ]);
+
   private static formatDateTime(dateValue: Date): { date: string; time: string } {
     const date = new Date(dateValue);
     return {
@@ -56,6 +64,68 @@ export class ActivityNotificationService {
     }
   }
 
+  private static buildInitiatorEmailContent(
+    event: BookingNotificationOptions["event"],
+    actorRole: RecipientRole,
+    studentName: string,
+    teacherName: string,
+    date: string,
+    time: string
+  ): { subject: string; html: string } {
+    const actorName = actorRole === "teacher" ? teacherName : studentName;
+    const counterpartName = actorRole === "teacher" ? studentName : teacherName;
+
+    const isReschedule =
+      event === "SESSION_RESCHEDULED_BY_TEACHER" ||
+      event === "SESSION_RESCHEDULED_BY_STUDENT";
+
+    const subject = isReschedule ? "Session reschedule confirmation" : "Session schedule confirmation";
+    const actionLabel = isReschedule ? "rescheduled" : "scheduled";
+
+    return {
+      subject,
+      html: `
+        <div style="font-family:Arial,sans-serif;line-height:1.6;color:#111827;max-width:560px;margin:0 auto;">
+          <h2 style="margin:0 0 12px;">${subject}</h2>
+          <p style="margin:0 0 12px;">Hi ${actorName},</p>
+          <p style="margin:0 0 12px;">You have ${actionLabel} a session with ${counterpartName} for <strong>${date}</strong> at <strong>${time}</strong>.</p>
+          <p style="margin:0;">If this was not intended, please review the session details from your dashboard.</p>
+        </div>
+      `,
+    };
+  }
+
+  private static async notifyInitiatorByEmail(
+    recipientEmail: string | null | undefined,
+    event: BookingNotificationOptions["event"],
+    actorRole: RecipientRole,
+    studentName: string,
+    teacherName: string,
+    date: string,
+    time: string
+  ) {
+    if (!recipientEmail) return;
+
+    const { subject, html } = this.buildInitiatorEmailContent(
+      event,
+      actorRole,
+      studentName,
+      teacherName,
+      date,
+      time
+    );
+
+    try {
+      await queueEmail({
+        to: recipientEmail,
+        subject,
+        html,
+      });
+    } catch (error) {
+      console.error("[activity-notification] email send failed:", error);
+    }
+  }
+
   private static async createTeacherInAppNotification(
     teacherId: string,
     title: string,
@@ -90,6 +160,15 @@ export class ActivityNotificationService {
             whatsapp_number: true,
             whatsapp_verified_at: true,
             whatsapp_opt_in: true,
+            profiles: {
+              select: {
+                users: {
+                  select: {
+                    email: true,
+                  },
+                },
+              },
+            },
           },
         },
         teachers: {
@@ -99,6 +178,15 @@ export class ActivityNotificationService {
             whatsapp_number: true,
             whatsapp_verified_at: true,
             whatsapp_opt_in: true,
+            profiles: {
+              select: {
+                users: {
+                  select: {
+                    email: true,
+                  },
+                },
+              },
+            },
           },
         },
       },
@@ -124,24 +212,69 @@ export class ActivityNotificationService {
       initiated_by: actorLabel,
     };
 
-    await Promise.allSettled([
-      this.notifyRecipient(
-        options.event,
-        "teacher",
-        booking.teachers.whatsapp_number,
-        Boolean(booking.teachers.whatsapp_verified_at),
-        booking.teachers.whatsapp_opt_in ?? true,
-        commonVariables
-      ),
-      this.notifyRecipient(
-        options.event,
-        "student",
-        booking.students.whatsapp_number,
-        Boolean(booking.students.whatsapp_verified_at),
-        booking.students.whatsapp_opt_in ?? true,
-        commonVariables
-      ),
-    ]);
+    const shouldSplitChannels = this.SCHEDULE_OR_RESCHEDULE_EVENTS.has(options.event);
+
+    if (shouldSplitChannels) {
+      const whatsappRecipientRole: RecipientRole =
+        options.initiatedBy === "teacher" ? "student" : "teacher";
+
+      const whatsappRecipient =
+        whatsappRecipientRole === "teacher"
+          ? {
+              phone: booking.teachers.whatsapp_number,
+              verified: Boolean(booking.teachers.whatsapp_verified_at),
+              optIn: booking.teachers.whatsapp_opt_in ?? true,
+            }
+          : {
+              phone: booking.students.whatsapp_number,
+              verified: Boolean(booking.students.whatsapp_verified_at),
+              optIn: booking.students.whatsapp_opt_in ?? true,
+            };
+
+      const initiatorEmail =
+        options.initiatedBy === "teacher"
+          ? booking.teachers.profiles?.users?.email
+          : booking.students.profiles?.users?.email;
+
+      await Promise.allSettled([
+        this.notifyRecipient(
+          options.event,
+          whatsappRecipientRole,
+          whatsappRecipient.phone,
+          whatsappRecipient.verified,
+          whatsappRecipient.optIn,
+          commonVariables
+        ),
+        this.notifyInitiatorByEmail(
+          initiatorEmail,
+          options.event,
+          options.initiatedBy,
+          studentName,
+          teacherName,
+          dateTime.date,
+          dateTime.time
+        ),
+      ]);
+    } else {
+      await Promise.allSettled([
+        this.notifyRecipient(
+          options.event,
+          "teacher",
+          booking.teachers.whatsapp_number,
+          Boolean(booking.teachers.whatsapp_verified_at),
+          booking.teachers.whatsapp_opt_in ?? true,
+          commonVariables
+        ),
+        this.notifyRecipient(
+          options.event,
+          "student",
+          booking.students.whatsapp_number,
+          Boolean(booking.students.whatsapp_verified_at),
+          booking.students.whatsapp_opt_in ?? true,
+          commonVariables
+        ),
+      ]);
+    }
 
     const inAppTitleMap: Record<BookingNotificationOptions["event"], string> = {
       SESSION_SCHEDULED_BY_TEACHER: "Session Scheduled",

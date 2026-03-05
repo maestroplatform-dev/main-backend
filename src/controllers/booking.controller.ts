@@ -244,19 +244,19 @@ export class BookingController {
 
   /**
    * PATCH /api/bookings/:id/accept
-   * Teacher accepts a demo request
+   * Counterparty accepts a pending booking request
    */
   async acceptBooking(req: AuthRequest, res: Response) {
     try {
       const id = req.params.id as string;
-      const teacherId = req.user?.id;
+      const userId = req.user?.id;
 
-      if (!teacherId) {
+      if (!userId) {
         res.status(401).json({ error: "Unauthorized" });
         return;
       }
 
-      const booking = await bookingService.acceptBooking(id, teacherId);
+      const booking = await bookingService.acceptBooking(id, userId);
 
       res.json({
         success: true,
@@ -357,6 +357,33 @@ export class BookingController {
     } catch (error: any) {
       console.error("Error marking booking completed:", error);
       res.status(400).json({ error: error.message || "Failed to mark booking completed" });
+    }
+  }
+
+  /**
+   * PATCH /api/bookings/:id/absent
+   * Teacher marks a class as absent
+   */
+  async markBookingAbsent(req: AuthRequest, res: Response) {
+    try {
+      const id = req.params.id as string;
+      const teacherId = req.user?.id;
+
+      if (!teacherId) {
+        res.status(401).json({ error: "Unauthorized" });
+        return;
+      }
+
+      const booking = await bookingService.markBookingAbsent(id, teacherId);
+
+      res.json({
+        success: true,
+        message: "Session marked absent successfully",
+        data: booking,
+      });
+    } catch (error: any) {
+      console.error("Error marking booking absent:", error);
+      res.status(400).json({ error: error.message || "Failed to mark booking absent" });
     }
   }
 

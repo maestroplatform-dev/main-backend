@@ -137,6 +137,10 @@ WHATSAPP_11ZA_CHANNEL=whatsapp
 # Optional debug mode (logs payloads, does not send)
 WHATSAPP_DRY_RUN=false
 
+# Activity template names (shared across actor for easier maintenance)
+WHATSAPP_11ZA_TEMPLATE_SESSION_SCHEDULED=session_scheduled
+WHATSAPP_11ZA_TEMPLATE_SESSION_RESCHEDULED=session_rescheduled
+
 # OTP verification settings
 WHATSAPP_11ZA_OTP_TEMPLATE=whatsapp_otp_verification
 WHATSAPP_OTP_SECRET=replace_with_strong_random_secret

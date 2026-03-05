@@ -1105,6 +1105,7 @@ enum booking_status {
   SCHEDULED
   RESCHEDULE_PROPOSED
   COMPLETED
+  ABSENT
   CANCELLED
 
   @@schema("public")

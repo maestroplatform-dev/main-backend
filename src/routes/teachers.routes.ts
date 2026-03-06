@@ -82,6 +82,13 @@ router.get(
   asyncHandler(TeacherController.getBankDetails)
 )
 
+router.get(
+  '/earnings',
+  authenticateUser,
+  requireRole('teacher'),
+  asyncHandler(TeacherController.getEarnings)
+)
+
 router.post(
   '/bank-details',
   authenticateUser,

@@ -438,6 +438,183 @@ export class TeacherService {
     return bankDetails
   }
 
+  // Get teacher earnings overview for dashboard
+  static async getEarningsOverview(teacherId: string) {
+    const teacher = await prisma.teachers.findUnique({
+      where: { id: teacherId },
+      select: { id: true },
+    })
+
+    if (!teacher) {
+      throw new AppError(404, 'Teacher not found', 'TEACHER_NOT_FOUND')
+    }
+
+    const completedBookings = await prisma.bookings.findMany({
+      where: {
+        teacher_id: teacherId,
+        status: 'COMPLETED',
+        is_demo: false,
+      },
+      select: {
+        id: true,
+        scheduled_at: true,
+        duration_minutes: true,
+        purchased_packages: {
+          select: {
+            price_per_session: true,
+          },
+        },
+      },
+      orderBy: {
+        scheduled_at: 'desc',
+      },
+    })
+
+    const rows = completedBookings.map((booking) => {
+      const sessionDate = new Date(booking.scheduled_at)
+      const durationMinutes = booking.duration_minutes || 60
+      const hours = durationMinutes / 60
+      const earnings = Number(booking.purchased_packages?.price_per_session || 0)
+
+      return {
+        date: sessionDate,
+        hours,
+        earnings,
+      }
+    })
+
+    const round2 = (value: number) => Math.round(value * 100) / 100
+    const sum = (values: number[]) => values.reduce((acc, value) => acc + value, 0)
+
+    const now = new Date()
+    const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+    const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1)
+    const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+
+    const fyStartYear = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1
+    const financialYearStart = new Date(fyStartYear, 3, 1)
+    const nextFinancialYearStart = new Date(fyStartYear + 1, 3, 1)
+
+    const inRange = (date: Date, start: Date, end: Date) => date >= start && date < end
+
+    const totalEarnings = round2(sum(rows.map((row) => row.earnings)))
+    const totalHours = round2(sum(rows.map((row) => row.hours)))
+
+    const thisMonthRows = rows.filter((row) => inRange(row.date, currentMonthStart, nextMonthStart))
+    const lastMonthRows = rows.filter((row) => inRange(row.date, lastMonthStart, currentMonthStart))
+    const thisFinancialYearRows = rows.filter((row) =>
+      inRange(row.date, financialYearStart, nextFinancialYearStart)
+    )
+
+    const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+    const prevMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+    const previousMonthKey = `${prevMonthDate.getFullYear()}-${String(prevMonthDate.getMonth() + 1).padStart(2, '0')}`
+
+    const getMonthStatus = (monthKey: string): 'Paid' | 'Pending' | 'Processing' => {
+      if (monthKey === currentMonthKey) return 'Pending'
+      if (monthKey === previousMonthKey) return 'Processing'
+      return 'Paid'
+    }
+
+    const monthlyMap = new Map<string, { monthDate: Date; hours_completed: number; total_earnings: number }>()
+
+    rows.forEach((row) => {
+      const monthKey = `${row.date.getFullYear()}-${String(row.date.getMonth() + 1).padStart(2, '0')}`
+      const monthStart = new Date(row.date.getFullYear(), row.date.getMonth(), 1)
+      const current = monthlyMap.get(monthKey)
+
+      if (!current) {
+        monthlyMap.set(monthKey, {
+          monthDate: monthStart,
+          hours_completed: row.hours,
+          total_earnings: row.earnings,
+        })
+      } else {
+        current.hours_completed += row.hours
+        current.total_earnings += row.earnings
+      }
+    })
+
+    const monthlySummary = Array.from(monthlyMap.entries())
+      .sort((a, b) => b[1].monthDate.getTime() - a[1].monthDate.getTime())
+      .map(([monthKey, data]) => ({
+        month: data.monthDate.toLocaleDateString('en-IN', {
+          month: 'short',
+          year: 'numeric',
+        }),
+        hours_completed: round2(data.hours_completed),
+        total_earnings: round2(data.total_earnings),
+        status: getMonthStatus(monthKey),
+      }))
+
+    const getWeekStart = (date: Date) => {
+      const weekStart = new Date(date)
+      weekStart.setHours(0, 0, 0, 0)
+      const day = weekStart.getDay()
+      const diff = (day + 6) % 7 // Monday as start
+      weekStart.setDate(weekStart.getDate() - diff)
+      return weekStart
+    }
+
+    const weeklyMap = new Map<string, { weekStart: Date; hours_completed: number; total_earnings: number }>()
+
+    rows.forEach((row) => {
+      const weekStart = getWeekStart(row.date)
+      const weekKey = weekStart.toISOString().split('T')[0]
+      const current = weeklyMap.get(weekKey)
+
+      if (!current) {
+        weeklyMap.set(weekKey, {
+          weekStart,
+          hours_completed: row.hours,
+          total_earnings: row.earnings,
+        })
+      } else {
+        current.hours_completed += row.hours
+        current.total_earnings += row.earnings
+      }
+    })
+
+    const currentWeekStart = getWeekStart(now)
+    const previousWeekStart = new Date(currentWeekStart)
+    previousWeekStart.setDate(previousWeekStart.getDate() - 7)
+
+    const weeklySummary = Array.from(weeklyMap.entries())
+      .sort((a, b) => b[1].weekStart.getTime() - a[1].weekStart.getTime())
+      .map(([weekKey, data]) => {
+        const isCurrentWeek = weekKey === currentWeekStart.toISOString().split('T')[0]
+        const isPreviousWeek = weekKey === previousWeekStart.toISOString().split('T')[0]
+
+        return {
+          month: `Week of ${data.weekStart.toLocaleDateString('en-IN', {
+            day: 'numeric',
+            month: 'short',
+            year: 'numeric',
+          })}`,
+          hours_completed: round2(data.hours_completed),
+          total_earnings: round2(data.total_earnings),
+          status: isCurrentWeek ? 'Pending' : isPreviousWeek ? 'Processing' : 'Paid' as 'Paid' | 'Pending' | 'Processing',
+        }
+      })
+
+    return {
+      stats: {
+        total_earnings: totalEarnings,
+        total_hours: totalHours,
+        this_financial_year: round2(sum(thisFinancialYearRows.map((row) => row.earnings))),
+        this_financial_year_hours: round2(sum(thisFinancialYearRows.map((row) => row.hours))),
+        last_month: round2(sum(lastMonthRows.map((row) => row.earnings))),
+        last_month_hours: round2(sum(lastMonthRows.map((row) => row.hours))),
+        this_month: round2(sum(thisMonthRows.map((row) => row.earnings))),
+        this_month_hours: round2(sum(thisMonthRows.map((row) => row.hours))),
+      },
+      summary: {
+        monthly: monthlySummary,
+        weekly: weeklySummary,
+      },
+    }
+  }
+
   // Save/update teacher bank details
   static async saveBankDetails(teacherId: string, data: {
     bank_name: string

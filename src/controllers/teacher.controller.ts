@@ -103,6 +103,16 @@ export class TeacherController {
     })
   }
 
+  // GET /api/v1/teachers/earnings
+  static async getEarnings(req: AuthRequest, res: Response) {
+    const earnings = await TeacherService.getEarningsOverview(req.user!.id)
+
+    res.json({
+      success: true,
+      data: earnings,
+    })
+  }
+
   // POST/PUT /api/v1/teachers/bank-details
   static async saveBankDetails(req: AuthRequest, res: Response) {
     const { bank_name, account_holder_name, account_number, gst_number, ifsc_code } = req.body

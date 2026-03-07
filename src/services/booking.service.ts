@@ -97,6 +97,7 @@ export class BookingService {
         select: {
           id: true,
           student_id: true,
+          purchased_package_id: true,
           status: true,
           scheduled_at: true,
           rescheduled_at: true,
@@ -121,8 +122,12 @@ export class BookingService {
 
     return Array.from(packageByStudent.values()).map((purchasedPackage) => {
       const studentBookings = bookingsByStudent.get(purchasedPackage.student_id) || [];
+      const packageBookings = studentBookings.filter(
+        (booking: any) => (booking as any).purchased_package_id === purchasedPackage.id
+      );
+      const scheduledSessionsCount = packageBookings.length;
       const now = new Date();
-      const upcomingBooking = studentBookings
+      const upcomingBooking = packageBookings
         .filter((booking) => {
           const bookingDate =
             booking.status === "RESCHEDULE_PROPOSED" && booking.rescheduled_at
@@ -167,7 +172,8 @@ export class BookingService {
         packageStatus: purchasedPackage.status,
         classesRemaining: purchasedPackage.classes_remaining,
         classesTotal: purchasedPackage.classes_total,
-        hasBookings: studentBookings.length > 0,
+        hasBookings: packageBookings.length > 0,
+        scheduledSessionsCount,
       };
     });
   }

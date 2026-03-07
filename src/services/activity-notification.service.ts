@@ -19,6 +19,8 @@ interface BookingNotificationOptions {
 }
 
 export class ActivityNotificationService {
+  private static DISPLAY_TIMEZONE = "Asia/Kolkata";
+
   private static SCHEDULE_OR_RESCHEDULE_EVENTS: ReadonlySet<BookingNotificationOptions["event"]> = new Set([
     "SESSION_SCHEDULED_BY_TEACHER",
     "SESSION_SCHEDULED_BY_STUDENT",
@@ -26,19 +28,29 @@ export class ActivityNotificationService {
     "SESSION_RESCHEDULED_BY_STUDENT",
   ]);
 
-  private static formatDateTime(dateValue: Date): { date: string; time: string } {
-    const date = new Date(dateValue);
-    return {
-      date: date.toLocaleDateString("en-IN", {
-        day: "numeric",
-        month: "short",
-        year: "numeric",
-      }),
-      time: date.toLocaleTimeString("en-US", {
+  private static formatDateTime(
+    dateValue: Date,
+    durationMinutes: number = 60
+  ): { date: string; time: string } {
+    const start = new Date(dateValue);
+    const end = new Date(start.getTime() + durationMinutes * 60 * 1000);
+
+    const formatTime = (value: Date) =>
+      value.toLocaleTimeString("en-US", {
         hour: "numeric",
         minute: "2-digit",
         hour12: true,
+        timeZone: this.DISPLAY_TIMEZONE,
+      });
+
+    return {
+      date: start.toLocaleDateString("en-IN", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+        timeZone: this.DISPLAY_TIMEZONE,
       }),
+      time: `${formatTime(start)} - ${formatTime(end)}`,
     };
   }
 
@@ -201,8 +213,8 @@ export class ActivityNotificationService {
     const teacherName = booking.teachers.name || "Teacher";
     const dateTime =
       booking.status === "RESCHEDULE_PROPOSED" && booking.rescheduled_at
-        ? this.formatDateTime(booking.rescheduled_at)
-        : this.formatDateTime(booking.scheduled_at);
+        ? this.formatDateTime(booking.rescheduled_at, booking.duration_minutes || 60)
+        : this.formatDateTime(booking.scheduled_at, booking.duration_minutes || 60);
 
     const commonVariables = {
       student_name: studentName,

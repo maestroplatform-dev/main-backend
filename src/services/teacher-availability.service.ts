@@ -443,26 +443,6 @@ export class TeacherAvailabilityService {
       durationMinutes,
     })
 
-    // Get all availability slots in range
-    const availability = await prisma.teacher_availability.findMany({
-      where: {
-        teacher_id: teacherId,
-        specific_date: {
-          gte: start,
-          lte: end,
-        },
-        is_unavailable: false,
-      },
-      orderBy: [{ specific_date: 'asc' }, { start_time: 'asc' }],
-    })
-
-    console.log("📊 [TeacherAvailabilityService] Found availability slots:", availability.length, availability)
-
-    if (availability.length === 0) {
-      console.warn("⚠️ [TeacherAvailabilityService] No availability slots found for teacher")
-      return []
-    }
-
     // Get existing bookings in the date range
     const bookings = await prisma.bookings.findMany({
       where: {
@@ -471,10 +451,12 @@ export class TeacherAvailabilityService {
           gte: start,
           lte: new Date(end.getTime() + 24 * 60 * 60 * 1000), // Include end date
         },
-        status: { notIn: ['CANCELLED'] },
+        status: { in: ['PENDING_APPROVAL', 'SCHEDULED', 'RESCHEDULE_PROPOSED'] },
       },
       select: {
+        status: true,
         scheduled_at: true,
+        rescheduled_at: true,
         duration_minutes: true,
       },
     })
@@ -485,14 +467,16 @@ export class TeacherAvailabilityService {
     const slots: { date: string; startTime: string; endTime: string; duration: number }[] = []
     const now = new Date()
 
-    for (const availSlot of availability) {
-      if (!availSlot.specific_date) continue
+    // Always use open-day slots and only block booked overlaps + past times.
+    const OPEN_DAY_START = '00:00'
+    const OPEN_DAY_END = '24:00'
 
-      const dateStr = formatDate(availSlot.specific_date)
+    const dateCursor = new Date(start)
+    while (dateCursor <= end) {
       const generatedSlots = this.generateTimeSlots(
-        availSlot.specific_date,
-        availSlot.start_time,
-        availSlot.end_time,
+        new Date(dateCursor),
+        OPEN_DAY_START,
+        OPEN_DAY_END,
         durationMinutes
       )
 
@@ -505,7 +489,10 @@ export class TeacherAvailabilityService {
 
         // Check if overlaps with any booking
         const isBooked = bookings.some((booking) => {
-          const bookingStart = new Date(booking.scheduled_at)
+          const bookingStart =
+            booking.status === 'RESCHEDULE_PROPOSED' && booking.rescheduled_at
+              ? new Date(booking.rescheduled_at)
+              : new Date(booking.scheduled_at)
           const bookingEnd = new Date(
             bookingStart.getTime() + (booking.duration_minutes || 60) * 60 * 1000
           )
@@ -516,6 +503,8 @@ export class TeacherAvailabilityService {
           slots.push(slot)
         }
       }
+
+      dateCursor.setDate(dateCursor.getDate() + 1)
     }
 
     console.log("✅ [TeacherAvailabilityService] Returning slots:", slots.length, slots.slice(0, 3))
@@ -533,6 +522,7 @@ export class TeacherAvailabilityService {
   ): { date: string; startTime: string; endTime: string; duration: number }[] {
     const slots = []
     const dateStr = formatDate(date)
+    const startStepMinutes = 30
 
     const toMinutes = (time: string) => {
       const [h, m] = time.split(':').map(Number)
@@ -555,7 +545,7 @@ export class TeacherAvailabilityService {
         endTime: toTimeStr(currentMinutes + durationMinutes),
         duration: durationMinutes,
       })
-      currentMinutes += durationMinutes
+      currentMinutes += startStepMinutes
     }
 
     return slots
@@ -563,7 +553,8 @@ export class TeacherAvailabilityService {
 
   /**
    * Get teacher's calendar view (availability + bookings)
-   * Note: Excludes PENDING_APPROVAL bookings (demos not yet accepted)
+    * Note: Includes requested class sessions (PENDING_APPROVAL non-demo)
+    * but excludes pending demo requests.
    */
   static async getCalendarView(teacherId: string, startDate: string, endDate: string) {
     const start = parseDate(startDate)
@@ -587,10 +578,17 @@ export class TeacherAvailabilityService {
             gte: start,
             lte: new Date(end.getTime() + 24 * 60 * 60 * 1000),
           },
-          // Exclude pending approval demos - they should only appear after teacher accepts
-          status: {
-            not: 'PENDING_APPROVAL',
-          },
+          AND: [
+            {
+              OR: [
+                { status: { not: 'PENDING_APPROVAL' } },
+                {
+                  status: 'PENDING_APPROVAL',
+                  booking_type: { not: 'demo' },
+                },
+              ],
+            },
+          ],
         },
         include: {
           students: {

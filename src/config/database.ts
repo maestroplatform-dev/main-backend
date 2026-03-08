@@ -11,6 +11,11 @@ if (!connectionString) {
   throw new Error('DATABASE_URL is not defined in environment variables')
 }
 
+const parseIntEnv = (value: string | undefined, fallback: number): number => {
+  const parsed = Number.parseInt(value || '', 10)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
+}
+
 // Declare global type to hold the singleton Prisma instance
 declare global {
   // eslint-disable-next-line no-var
@@ -23,20 +28,26 @@ declare global {
  * production environments (Render / Supabase / Neon).
  */
 function createPrismaClient(): PrismaClient {
+  const isProduction = process.env.NODE_ENV === 'production'
+  const poolMax = parseIntEnv(process.env.PG_POOL_MAX, isProduction ? 4 : 8)
+  const poolMin = parseIntEnv(process.env.PG_POOL_MIN, 0)
+  const connectionTimeoutMillis = parseIntEnv(process.env.PG_CONNECTION_TIMEOUT_MS, 10000)
+  const idleTimeoutMillis = parseIntEnv(process.env.PG_IDLE_TIMEOUT_MS, 30000)
+
   const pool = new Pool({ 
     connectionString,
     // Supabase requires SSL — pg ignores ?sslmode=require from the URL
     ssl: { rejectUnauthorized: false },
     // Supabase pooler has a max of ~15 connections in Session mode
     // Keep pool small but allow enough for concurrent requests
-    max: 8,
+    max: poolMax,
     // Start with 0 — lazy-create connections as needed
     // Avoids cold-start failures when Supabase pooler is slow to respond
-    min: 0,
+    min: poolMin,
     // Connection timeout — generous for cold starts on Render → Supabase
-    connectionTimeoutMillis: 20000,
+    connectionTimeoutMillis,
     // Idle connections will be closed after 30 seconds
-    idleTimeoutMillis: 30000,
+    idleTimeoutMillis,
     // Keep connection alive
     keepAlive: true,
     // Close idle connections to free up pool
@@ -45,7 +56,23 @@ function createPrismaClient(): PrismaClient {
 
   // Log pool errors so they don't crash the process silently
   pool.on('error', (err) => {
-    console.error('⚠️ Unexpected PG pool error:', err.message)
+    console.error('⚠️ Unexpected PG pool error:', {
+      message: err.message,
+      totalCount: pool.totalCount,
+      idleCount: pool.idleCount,
+      waitingCount: pool.waitingCount,
+      max: pool.options.max,
+      min: pool.options.min,
+      connectionTimeoutMillis: pool.options.connectionTimeoutMillis,
+      idleTimeoutMillis: pool.options.idleTimeoutMillis,
+    })
+  })
+
+  console.log('🗄️ PG pool config:', {
+    max: pool.options.max,
+    min: pool.options.min,
+    connectionTimeoutMillis: pool.options.connectionTimeoutMillis,
+    idleTimeoutMillis: pool.options.idleTimeoutMillis,
   })
 
   const adapter = new PrismaPg(pool)

@@ -6,6 +6,7 @@ import logger from '../utils/logger'
 
 const quizResponseSchema = z.object({
   name: z.string().min(1, 'Name is required'),
+  age: z.number().int().min(3, 'Age must be at least 3').max(100, 'Age must be at most 100'),
   phone: z.string().regex(/^\d{10}$/, 'Phone must be a valid 10-digit number'),
   instruments: z.array(z.string()).default([]),
   learning_mode: z.enum(['online', 'offline', 'both']).default('both'),
@@ -29,6 +30,7 @@ export class QuizResponseController {
       const response = await prisma.quiz_responses.create({
         data: {
           name: parsed.name,
+          age: parsed.age,
           phone: parsed.phone,
           instruments: parsed.instruments,
           learning_mode: parsed.learning_mode,

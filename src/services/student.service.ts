@@ -2,6 +2,7 @@ import prisma from '../config/database'
 import { supabaseAdmin } from '../config/supabase'
 import { AppError } from '../types'
 import logger from '../utils/logger'
+import { ActivityNotificationService } from './activity-notification.service'
 
 interface StudentSignupData {
   email: string
@@ -100,6 +101,11 @@ export class StudentService {
 
       logger.info({ userId, email: data.email }, '✅ Student email signup completed')
 
+      // Send welcome email
+      void ActivityNotificationService.notifyStudentSignup(userId, data.name, data.email).catch((e) =>
+        logger.error({ error: e }, 'Failed to send student welcome email')
+      )
+
       return { user: signUpData.user, profile, student }
     } catch (error) {
       // Rollback: Delete Supabase user if student creation fails
@@ -190,6 +196,11 @@ export class StudentService {
       }
 
       logger.info({ userId: data.userId, email }, '✅ Student Google signup completed')
+
+      // Send welcome email
+      void ActivityNotificationService.notifyStudentSignup(data.userId, name, email).catch((e) =>
+        logger.error({ error: e }, 'Failed to send student welcome email')
+      )
 
       return { user: userData.user, profile, student }
     } catch (error) {

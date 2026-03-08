@@ -12,6 +12,7 @@ import { errorHandler, notFoundHandler } from './middleware/errorHandler'
 import { apiLimiter } from './middleware/rateLimiter'
 import requestLogger from './middleware/requestLogger'
 import { initSocketServer } from './socket'
+import { ReminderSchedulerService } from './services/reminder-scheduler.service'
 
 const app: Application = express()
 const httpServer = createServer(app)
@@ -89,6 +90,9 @@ const server = httpServer.listen(PORT, () => {
   console.log(`    GET  /health`)
   console.log(`    GET  /api/v1/test`)
   console.log('='.repeat(60) + '\n')
+
+  // Start reminder cron scheduler
+  ReminderSchedulerService.start()
 })
 
 // Keep server reference to prevent garbage collection

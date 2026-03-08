@@ -2,6 +2,7 @@ import prisma from '../config/database'
 import { AppError } from '../types'
 import type { TeacherCompleteOnboardingInput } from '../utils/validation'
 import { computeTotalPrice, buildPricingConfig } from '../utils/pricing'
+import { ActivityNotificationService } from './activity-notification.service'
 
 export class TeacherOnboardingService {
   // Complete onboarding 
@@ -255,6 +256,27 @@ export class TeacherOnboardingService {
         throw error
       }
       throw new AppError(500, 'Failed to complete onboarding', 'ONBOARDING_FAILED')
+    }
+  }
+
+  /**
+   * Send teacher welcome email after onboarding completes
+   */
+  static async sendWelcomeEmail(teacherId: string) {
+    try {
+      const teacher = await prisma.teachers.findUnique({
+        where: { id: teacherId },
+        select: { name: true, profiles: { select: { users: { select: { email: true } } } } },
+      })
+      if (teacher?.profiles?.users?.email) {
+        void ActivityNotificationService.notifyTeacherSignup(
+          teacherId,
+          teacher.name || 'Teacher',
+          teacher.profiles.users.email
+        ).catch(() => {})
+      }
+    } catch {
+      // Silently fail — welcome email is non-critical
     }
   }
 

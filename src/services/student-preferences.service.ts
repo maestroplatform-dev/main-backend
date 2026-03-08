@@ -1,6 +1,7 @@
 import prisma from '../config/database'
 import { AppError } from '../types'
 import logger from '../utils/logger'
+import { ActivityNotificationService } from './activity-notification.service'
 
 export interface StudentPreferencesData {
   instruments: string[]
@@ -56,6 +57,27 @@ export class StudentPreferencesService {
       })
 
       logger.info({ studentId }, '✅ Student preferences saved')
+
+      // Send preferences-received email
+      try {
+        const student = await prisma.students.findUnique({
+          where: { id: studentId },
+          select: { name: true, profiles: { select: { users: { select: { email: true } } } } },
+        })
+        const email = student?.profiles?.users?.email
+        if (email) {
+          void ActivityNotificationService.notifyPreferencesReceived(email, {
+            studentName: student?.name || 'Student',
+            instrument: data.instruments.join(', '),
+            mode: data.learning_mode,
+            feeRange: data.budget_min && data.budget_max ? `₹${data.budget_min} - ₹${data.budget_max}` : '-',
+            level: data.skill_level,
+            learningGoals: data.learning_goals.join(', '),
+          }).catch((e) => logger.error({ error: e }, 'Failed to send preferences email'))
+        }
+      } catch (e) {
+        logger.error({ error: e }, 'Failed to look up student for preferences email')
+      }
 
       return preferences
     } catch (error) {

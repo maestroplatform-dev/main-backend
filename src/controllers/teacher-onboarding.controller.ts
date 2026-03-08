@@ -34,6 +34,9 @@ export class TeacherOnboardingController {
 
     logger.info({ userId: req.user?.id }, '✅ Teacher onboarding completed successfully')
 
+    // Send welcome email (fire-and-forget)
+    void TeacherOnboardingService.sendWelcomeEmail(req.user!.id)
+
     res.status(201).json({
       success: true,
       data: {

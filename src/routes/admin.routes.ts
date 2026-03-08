@@ -3,6 +3,7 @@ import { AdminController } from '../controllers/admin.controller'
 import { FeaturedTeachersController } from '../controllers/featured-teachers.controller'
 import { SectionReviewController } from '../controllers/section-review.controller'
 import { SpecificPoliciesController } from '../controllers/specific-policies.controller'
+import { NotificationTemplateController } from '../controllers/notification-template.controller'
 import { authenticateUser, requireRole } from '../middleware/auth'
 import { apiLimiter } from '../middleware/rateLimiter'
 import { asyncHandler } from '../utils/asyncHandler'
@@ -71,5 +72,46 @@ router.put('/featured-teachers', apiLimiter, authenticateUser, requireRole('admi
 router.post('/featured-teachers', apiLimiter, authenticateUser, requireRole('admin'), asyncHandler(FeaturedTeachersController.addFeaturedTeacher))
 router.delete('/featured-teachers/:teacherId', apiLimiter, authenticateUser, requireRole('admin'), asyncHandler(FeaturedTeachersController.removeFeaturedTeacher))
 router.patch('/featured-teachers/order', apiLimiter, authenticateUser, requireRole('admin'), asyncHandler(FeaturedTeachersController.updateDisplayOrder))
+
+// Notification templates management (admin)
+router.get(
+	'/notification-templates',
+	apiLimiter,
+	authenticateUser,
+	requireRole('admin'),
+	asyncHandler(NotificationTemplateController.list)
+)
+
+router.get(
+	'/notification-templates/:triggerKey',
+	apiLimiter,
+	authenticateUser,
+	requireRole('admin'),
+	asyncHandler(NotificationTemplateController.get)
+)
+
+router.put(
+	'/notification-templates/:triggerKey',
+	apiLimiter,
+	authenticateUser,
+	requireRole('admin'),
+	asyncHandler(NotificationTemplateController.upsert)
+)
+
+router.patch(
+	'/notification-templates/:triggerKey/active',
+	apiLimiter,
+	authenticateUser,
+	requireRole('admin'),
+	asyncHandler(NotificationTemplateController.setActive)
+)
+
+router.post(
+	'/notification-templates/seed-defaults',
+	apiLimiter,
+	authenticateUser,
+	requireRole('admin'),
+	asyncHandler(NotificationTemplateController.seedDefaults)
+)
 
 export default router

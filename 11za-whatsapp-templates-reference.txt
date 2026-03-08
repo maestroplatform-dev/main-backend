@@ -1,0 +1,456 @@
+Maestera - 11za WhatsApp Template Reference
+Generated on: 2026-03-08
+Source of truth: notification_templates table (live DB)
+
+============================================================
+A) Legacy 11za templates already used in code today
+============================================================
+These are sent via WhatsAppNotificationService.sendActivityNotification:
+- session_scheduled
+- session_rescheduled
+- session_cancelled_by_teacher
+- session_cancelled_by_student
+- package_purchased
+- OTP template (WHATSAPP_11ZA_OTP_TEMPLATE)
+
+============================================================
+B) New WhatsApp templates to create in 11za
+============================================================
+Notes:
+1) Suggested 11za name is recommended only; keep your final approved name and map in code.
+2) 11za uses numbered placeholders. Use the exact variable order listed.
+3) Message copy below is the current live copy in DB.
+
+------------------------------------------------------------
+1) Trigger Key: DEMO_CANCELLED
+Suggested 11za Template Name: demo_cancelled
+Audience: student
+When to send: Demo cancelled
+Variables (order):
+1. Student Name
+2. Teacher Name
+3. Instrument
+4. Date
+5. Time
+Message:
+Hi {{1}},
+Your {{3}} demo session with {{2}} scheduled for {{4}} at {{5}} has been cancelled.
+We’d still love to help you get started.
+You can:
+• Propose a new time with the same teacher
+• Explore other teachers available at a different slot
+• Reach out to us and we’ll help you find a suitable teacher
+We’re happy to assist you in getting your demo scheduled at the earliest.
+Team Maestera
+
+------------------------------------------------------------
+2) Trigger Key: DEMO_NEW_PROPOSED_TIME
+Suggested 11za Template Name: demo_new_proposed_time
+Audience: student
+When to send: Teacher proposes new demo time
+Variables (order):
+1. Student Name
+2. Teacher Name
+3. Instrument
+4. Link
+Message:
+Hi {{1}}
+{{2}} has proposed a new time for your {{3}} demo session.
+Please review and confirm here:
+{{4}}
+Team Maestera
+
+------------------------------------------------------------
+3) Trigger Key: DEMO_POST_SESSION
+Suggested 11za Template Name: demo_post_session
+Audience: student
+When to send: Post demo follow-up
+Variables (order):
+1. Student Name
+2. Teacher Name
+3. Instrument
+4. Link
+Message:
+Hi {{1}} 🎶
+We hope you enjoyed your {{3}} demo session with {{2}}.
+You can now continue learning by scheduling your lessons. Simply make the payment and schedule your upcoming sessions here:
+{{4}}
+Team Maestera
+
+------------------------------------------------------------
+4) Trigger Key: DEMO_REMINDER
+Suggested 11za Template Name: demo_reminder
+Audience: student
+When to send: Demo reminder
+Variables (order):
+1. Student Name
+2. Teacher Name
+3. Instrument
+4. Date
+5. Time
+Message:
+Hi {{1}} 🎶
+Just a reminder about your scheduled {{3}} demo session with {{2}}.
+Date: {{4}}
+Time: {{5}}
+Our teachers reserve time specially for these sessions, so we request you to kindly avoid cancelling once scheduled or inform us in advance if you need to reschedule.
+Looking forward to having you in the session.
+Team Maestera
+
+------------------------------------------------------------
+5) Trigger Key: DEMO_RESCHEDULED_AFTER_TEACHER_APPROVAL
+Suggested 11za Template Name: demo_rescheduled_after_teacher_approval
+Audience: student
+When to send: Student demo rescheduled and approved
+Variables (order):
+1. Student Name
+2. Teacher Name
+3. Instrument
+4. Date
+5. Time
+6. Link
+Message:
+Hi {{1}} 🎶
+Your {{3}} demo session with {{2}} has been re-scheduled as follows:
+Date: {{4}}
+Time: {{5}}
+You can view the session details & join the link through the dashboard here:
+{{6}}
+Our teachers reserve time specially for these sessions, so we request you to kindly avoid cancelling once scheduled or inform us in advance if you need to reschedule.
+Team Maestera
+
+------------------------------------------------------------
+6) Trigger Key: DEMO_SCHEDULED_AFTER_TEACHER_APPROVAL
+Suggested 11za Template Name: demo_scheduled_after_teacher_approval
+Audience: student
+When to send: Student demo scheduled after teacher approval
+Variables (order):
+1. Student Name
+2. Teacher Name
+3. Instrument
+4. Date
+5. Time
+6. Link
+Message:
+Hi {{1}} 🎶
+Your {{3}} demo session with {{2}} has been scheduled as follows:
+Date: {{4}}
+Time: {{5}}
+You can view the session details & join the link through the dashboard here:
+{{6}}
+Our teachers reserve time specially for these sessions, so we request you to kindly avoid cancelling once scheduled or inform us in advance if you need to reschedule.
+Team Maestera
+
+------------------------------------------------------------
+7) Trigger Key: SESSION_CANCELLED_BY_TEACHER
+Suggested 11za Template Name: session_cancelled_by_teacher_student_v2
+Audience: student
+When to send: Teacher cancels session
+Variables (order):
+1. Student Name
+2. Teacher Name
+3. Instrument
+4. Date
+5. Time
+Message:
+Hi {{1}},
+Your {{3}} session with {{2}} scheduled for {{4}} at {{5}} has been cancelled by the teacher.
+You may propose a new time to reschedule, or let us know if you would like our team to assist in coordinating another slot.
+Team Maestera
+
+------------------------------------------------------------
+8) Trigger Key: SESSION_PROPOSED_BY_TEACHER
+Suggested 11za Template Name: session_proposed_by_teacher
+Audience: student
+When to send: Teacher proposes session time
+Variables (order):
+1. Student Name
+2. Teacher Name
+3. Instrument
+4. Date
+5. Time
+6. Link
+Message:
+Hi {{1}} 🎶
+{{2}} has proposed the following time & date for your {{3}} session.
+Date: {{4}}
+Time: {{5}}
+Please review the details and confirm from your dashboard.
+{{6}}
+Team Maestera
+
+------------------------------------------------------------
+9) Trigger Key: SESSION_REMINDER_1H
+Suggested 11za Template Name: session_reminder_1h
+Audience: student
+When to send: 1 hour before student session
+Variables (order):
+1. Teacher Name
+2. Instrument
+3. Time
+4. Join Link
+Message:
+Reminder 🎶
+Your {{2}} lesson starts in 1 hour.
+Teacher: {{1}}
+Time: {{3}}
+Join from your dashboard:
+{{4}}
+
+------------------------------------------------------------
+10) Trigger Key: SESSION_REMINDER_24H
+Suggested 11za Template Name: session_reminder_24h
+Audience: student
+When to send: 24 hours before student session
+Variables (order):
+1. Teacher Name
+2. Instrument
+3. Date
+4. Time
+Message:
+Reminder 🎶
+You have a {{2}} lesson with {{1}} tomorrow.
+Date: {{3}}
+Time: {{4}}
+Please be ready a few minutes before the session.
+Happy Learning,
+Team Maestera
+
+------------------------------------------------------------
+11) Trigger Key: TEACHER_DEMO_CANCELLED_BY_STUDENT
+Suggested 11za Template Name: teacher_demo_cancelled_by_student
+Audience: teacher
+When to send: Student cancels demo
+Variables (order):
+1. Teacher Name
+2. Student Name
+3. Instrument
+4. Date
+5. Time
+6. Dashboard Link
+Message:
+Hi {{1}},
+The {{3}} demo session with {{2}} scheduled for {{4}} at {{5}} has been cancelled by the student.
+The slot is now available in your schedule.
+View your dashboard here:
+{{6}}
+Team Maestera
+
+------------------------------------------------------------
+12) Trigger Key: TEACHER_DEMO_REMINDER_12H
+Suggested 11za Template Name: teacher_demo_reminder_12h
+Audience: teacher
+When to send: 12 hours before teacher demo
+Variables (order):
+1. Student Name
+2. Instrument
+3. Date
+4. Time
+Message:
+Reminder 🎶
+You have a {{2}} demo lesson with {{1}} on.
+Date: {{3}}
+Time: {{4}}
+
+------------------------------------------------------------
+13) Trigger Key: TEACHER_DEMO_REQUESTED
+Suggested 11za Template Name: teacher_demo_requested
+Audience: teacher
+When to send: Student requests demo
+Variables (order):
+1. Teacher Name
+2. Student Name
+3. Instrument
+4. Date
+5. Time
+6. Dashboard Link
+Message:
+Hi {{1}} 🎶
+You have received a demo session request from a student.
+Student: {{2}}
+Instrument: {{3}}
+Date: {{4}}
+Time: {{5}}
+Please review the request and approve a suitable time.
+Confirm here:
+{{6}}
+Once approved, the student will receive the session details.
+Team Maestera
+
+------------------------------------------------------------
+14) Trigger Key: TEACHER_DEMO_RESCHEDULED_BY_STUDENT
+Suggested 11za Template Name: teacher_demo_rescheduled_by_student
+Audience: teacher
+When to send: Student requests demo reschedule
+Variables (order):
+1. Teacher Name
+2. Student Name
+3. Instrument
+4. Link
+Message:
+Hi {{1}} 🎶
+{{2}} has requested to reschedule the {{3}} demo session.
+Please review and approve the proposed time here:
+{{4}}
+Team Maestera
+
+------------------------------------------------------------
+15) Trigger Key: TEACHER_DEMO_RESCHEDULED_CONFIRMED
+Suggested 11za Template Name: teacher_demo_rescheduled_confirmed
+Audience: teacher
+When to send: Teacher demo reschedule confirmed
+Variables (order):
+1. Teacher Name
+2. Student Name
+3. Instrument
+4. Date
+5. Time
+6. Link
+Message:
+Hi {{1}} 🎶
+{{3}} demo session with {{2}} has been rescheduled to Date: {{4}}
+Time: {{5}}
+{{6}}
+Team Maestera
+
+------------------------------------------------------------
+16) Trigger Key: TEACHER_DEMO_RESCHEDULED_CONFIRMED_BY_STUDENT
+Suggested 11za Template Name: teacher_demo_rescheduled_confirmed_by_student
+Audience: teacher
+When to send: Student approves teacher demo reschedule
+Variables (order):
+1. Teacher Name
+2. Student Name
+3. Instrument
+4. Date
+5. Time
+6. Link
+Message:
+Hi {{1}} 🎶
+Your {{3}} demo session with {{2}} has been re-scheduled as follows:
+Date: {{4}}
+Time: {{5}}
+You can view the session details & join the link through the dashboard here:
+{{6}}
+Team Maestera
+
+------------------------------------------------------------
+17) Trigger Key: TEACHER_DEMO_SCHEDULED_CONFIRMED
+Suggested 11za Template Name: teacher_demo_scheduled_confirmed
+Audience: teacher
+When to send: Student approves teacher-scheduled demo
+Variables (order):
+1. Teacher Name
+2. Student Name
+3. Instrument
+4. Date
+5. Time
+6. Link
+Message:
+Hi {{1}} 🎶
+Your {{3}} demo session with {{2}} has been scheduled as follows:
+Date: {{4}}
+Time: {{5}}
+You can view the session details & join the link through the dashboard here:
+{{6}}
+Team Maestera
+
+------------------------------------------------------------
+18) Trigger Key: TEACHER_SESSION_CANCELLED_BY_STUDENT
+Suggested 11za Template Name: teacher_session_cancelled_by_student
+Audience: teacher
+When to send: Student cancels session
+Variables (order):
+1. Teacher Name
+2. Instrument
+3. Date
+4. Time
+5. Link
+Message:
+Hi {{1}},
+Your {{2}} session scheduled for {{3}} at {{4}} has been cancelled.
+You may reschedule the session from your dashboard here:
+{{5}}
+Team Maestera 🎶
+
+------------------------------------------------------------
+19) Trigger Key: TEACHER_SESSION_PROPOSED_BY_STUDENT
+Suggested 11za Template Name: teacher_session_proposed_by_student
+Audience: teacher
+When to send: Student proposes lesson time
+Variables (order):
+1. Teacher Name
+2. Student Name
+3. Instrument
+4. Date
+5. Time
+6. Dashboard Link
+Message:
+Hi {{1}} 🎶
+{{2}} has proposed a time for your {{3}} lesson.
+Date: {{4}}
+Time: {{5}}
+Please review and confirm the session here:
+{{6}}
+Team Maestera
+
+------------------------------------------------------------
+20) Trigger Key: TEACHER_SESSION_REMINDER_1H
+Suggested 11za Template Name: teacher_session_reminder_1h
+Audience: teacher
+When to send: 1 hour before teacher session
+Variables (order):
+1. Student Name
+2. Instrument
+3. Time
+4. Dashboard Link
+Message:
+Reminder 🎶
+Your {{2}} lesson with {{1}} begins in 1 hour.
+Time: {{3}}
+Access session details here:
+{{4}}
+Team Maestera
+
+------------------------------------------------------------
+21) Trigger Key: TEACHER_SESSION_REMINDER_24H
+Suggested 11za Template Name: teacher_session_reminder_24h
+Audience: teacher
+When to send: 24 hours before teacher session
+Variables (order):
+1. Student Name
+2. Instrument
+3. Date
+4. Time
+Message:
+Reminder 🎶
+You have a {{2}} lesson with {{1}} tomorrow.
+Date: {{3}}
+Time: {{4}}
+Team Maestera
+
+------------------------------------------------------------
+22) Trigger Key: TEACHER_SESSION_RESCHEDULED_BY_STUDENT
+Suggested 11za Template Name: teacher_session_rescheduled_by_student
+Audience: teacher
+When to send: Student reschedules session
+Variables (order):
+1. Teacher Name
+2. Student Name
+3. Instrument
+4. Date
+5. Time
+6. Link
+Message:
+Hi {{1}} 🎶
+{{2}} has proposed the following time & date for your {{3}} session.
+Date: {{4}}
+Time: {{5}}
+Please review the details and confirm from your dashboard.
+{{6}}
+Team Maestera
+
+============================================================
+C) Mapping note for implementation
+============================================================
+Once 11za templates are approved, map each Trigger Key -> approved 11za template name in backend and pass variables in exact order above.

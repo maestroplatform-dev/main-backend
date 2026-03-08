@@ -428,6 +428,7 @@ model bookings {
   duration_minutes     Int?                @default(30)
   meeting_link         String?
   notes                String?
+  metadata             Json?               @default("{}")
   created_at           DateTime?           @default(now()) @db.Timestamptz(6)
   updated_at           DateTime?           @default(now()) @db.Timestamptz(6)
   is_demo              Boolean             @default(true)
@@ -917,6 +918,26 @@ model notifications {
   @@schema("public")
 }
 
+/// Admin-managed notification templates for email/WhatsApp triggers
+model notification_templates {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  trigger_key    String   @unique
+  name           String
+  audience       String
+  channels       String[] @default([])
+  email_subject  String?
+  email_body     String?
+  whatsapp_body  String?
+  variables      String[] @default([])
+  is_active      Boolean  @default(true)
+  created_at     DateTime @default(now()) @db.Timestamptz(6)
+  updated_at     DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([trigger_key], map: "idx_notification_templates_trigger")
+  @@index([is_active], map: "idx_notification_templates_active")
+  @@schema("public")
+}
+
 /// Featured teachers shown on homepage
 model featured_teachers {
   id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
@@ -1018,6 +1039,7 @@ model support_tickets {
 model quiz_responses {
   id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   name           String
+  age            Int?
   phone          String
   instruments    String[] @default([])
   learning_mode  String   @default("both")

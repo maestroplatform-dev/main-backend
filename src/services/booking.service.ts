@@ -502,6 +502,11 @@ export class BookingService {
       },
     });
 
+    // Notify teacher about the demo request
+    void ActivityNotificationService.notifyDemoRequested(booking.id).catch((error) => {
+      console.error('Failed to send demo request notification:', error);
+    });
+
     return booking;
   }
 
@@ -765,7 +770,7 @@ export class BookingService {
     const meetingId = nanoid(12);
     const meetingLink = booking.meeting_link || `https://meet.jit.si/Maestera-Session-${meetingId}`;
 
-    return prisma.bookings.update({
+    const updatedBooking = await prisma.bookings.update({
       where: { id: bookingId },
       data: {
         status: "SCHEDULED",
@@ -781,6 +786,28 @@ export class BookingService {
         },
       },
     });
+
+    // Send approval notifications
+    if (booking.is_demo) {
+      void ActivityNotificationService.notifyDemoApproved(updatedBooking.id).catch((error) => {
+        console.error('Failed to send demo approval notification:', error);
+      });
+    } else {
+      // Regular session accepted: notify both sides
+      const initiatedBy = isTeacher ? "teacher" : "student";
+      const event = initiatedBy === "teacher"
+        ? "SESSION_SCHEDULED_BY_TEACHER"
+        : "SESSION_SCHEDULED_BY_STUDENT";
+      void ActivityNotificationService.notifyBookingActivity({
+        bookingId: updatedBooking.id,
+        initiatedBy,
+        event,
+      }).catch((error) => {
+        console.error('Failed to send accept notification:', error);
+      });
+    }
+
+    return updatedBooking;
   }
 
   /**
@@ -865,17 +892,25 @@ export class BookingService {
     });
 
     const initiatedBy = booking.teacher_id === userId ? "teacher" : "student";
-    const event = initiatedBy === "teacher"
-      ? "SESSION_RESCHEDULED_BY_TEACHER"
-      : "SESSION_RESCHEDULED_BY_STUDENT";
 
-    void ActivityNotificationService.notifyBookingActivity({
-      bookingId: updatedBooking.id,
-      initiatedBy,
-      event,
-    }).catch((error) => {
-      console.error("Failed to send reschedule notification:", error);
-    });
+    if (booking.is_demo) {
+      // Demo reschedule has its own templates
+      void ActivityNotificationService.notifyDemoRescheduled(updatedBooking.id, initiatedBy).catch((error) => {
+        console.error("Failed to send demo reschedule notification:", error);
+      });
+    } else {
+      const event = initiatedBy === "teacher"
+        ? "SESSION_RESCHEDULED_BY_TEACHER"
+        : "SESSION_RESCHEDULED_BY_STUDENT";
+
+      void ActivityNotificationService.notifyBookingActivity({
+        bookingId: updatedBooking.id,
+        initiatedBy,
+        event,
+      }).catch((error) => {
+        console.error("Failed to send reschedule notification:", error);
+      });
+    }
 
     return updatedBooking;
   }
@@ -911,7 +946,7 @@ export class BookingService {
       throw new Error("You cannot confirm your own reschedule proposal");
     }
 
-    return prisma.bookings.update({
+    const updatedReschedule = await prisma.bookings.update({
       where: { id: bookingId },
       data: {
         status: "SCHEDULED",
@@ -929,6 +964,28 @@ export class BookingService {
         },
       },
     });
+
+    // Notifications for reschedule confirmation
+    const confirmedBy = isTeacher ? "teacher" : "student";
+    if (booking.is_demo) {
+      void ActivityNotificationService.notifyDemoRescheduleConfirmed(updatedReschedule.id, confirmedBy).catch((error) => {
+        console.error('Failed to send demo reschedule confirmed notification:', error);
+      });
+    } else {
+      const initiatedBy = confirmedBy;
+      const event = initiatedBy === "teacher"
+        ? "SESSION_RESCHEDULED_BY_TEACHER"
+        : "SESSION_RESCHEDULED_BY_STUDENT";
+      void ActivityNotificationService.notifyBookingActivity({
+        bookingId: updatedReschedule.id,
+        initiatedBy: initiatedBy as "teacher" | "student",
+        event,
+      }).catch((error) => {
+        console.error('Failed to send reschedule confirm notification:', error);
+      });
+    }
+
+    return updatedReschedule;
   }
 
   /**
@@ -993,8 +1050,21 @@ export class BookingService {
               classes_completed: { increment: 1 },
             },
           });
+
+          // Check if all sessions are now completed
+          const newCompleted = purchasedPackage.classes_completed + 1;
+          if (newCompleted >= purchasedPackage.classes_total) {
+            void ActivityNotificationService.notifyAllSessionsCompleted(purchasedPackage.id).catch((error) => {
+              console.error('Failed to send all-sessions-completed notification:', error);
+            });
+          }
         }
       }
+
+      // Send attendance present email
+      void ActivityNotificationService.notifyAttendancePresent(bookingId).catch((error) => {
+        console.error('Failed to send attendance present notification:', error);
+      });
 
       return updatedBooking;
     });
@@ -1062,8 +1132,21 @@ export class BookingService {
               classes_completed: { increment: 1 },
             },
           });
+
+          // Check if all sessions are now completed
+          const newCompleted = purchasedPackage.classes_completed + 1;
+          if (newCompleted >= purchasedPackage.classes_total) {
+            void ActivityNotificationService.notifyAllSessionsCompleted(purchasedPackage.id).catch((error) => {
+              console.error('Failed to send all-sessions-completed notification:', error);
+            });
+          }
         }
       }
+
+      // Send attendance absent email
+      void ActivityNotificationService.notifyAttendanceAbsent(bookingId).catch((error) => {
+        console.error('Failed to send attendance absent notification:', error);
+      });
 
       return updatedBooking;
     });
@@ -1099,17 +1182,25 @@ export class BookingService {
     });
 
     const initiatedBy = booking.teacher_id === userId ? "teacher" : "student";
-    const event = initiatedBy === "teacher"
-      ? "SESSION_CANCELLED_BY_TEACHER"
-      : "SESSION_CANCELLED_BY_STUDENT";
 
-    void ActivityNotificationService.notifyBookingActivity({
-      bookingId: cancelledBooking.id,
-      initiatedBy,
-      event,
-    }).catch((error) => {
-      console.error("Failed to send cancel notification:", error);
-    });
+    if (booking.is_demo) {
+      // Demo cancellation has its own templates
+      void ActivityNotificationService.notifyDemoCancelled(cancelledBooking.id, initiatedBy).catch((error) => {
+        console.error("Failed to send demo cancel notification:", error);
+      });
+    } else {
+      const event = initiatedBy === "teacher"
+        ? "SESSION_CANCELLED_BY_TEACHER"
+        : "SESSION_CANCELLED_BY_STUDENT";
+
+      void ActivityNotificationService.notifyBookingActivity({
+        bookingId: cancelledBooking.id,
+        initiatedBy,
+        event,
+      }).catch((error) => {
+        console.error("Failed to send cancel notification:", error);
+      });
+    }
 
     return cancelledBooking;
   }

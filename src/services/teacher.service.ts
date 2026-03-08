@@ -261,38 +261,40 @@ export class TeacherService {
       })
     }
 
-    // Level filter: teacher has a tier matching the level with price > 0
-    if (filters?.level) {
+    // Level/mode filters should match actual tier pricing data (same source used by frontend cards)
+    const normalizedLevel = filters?.level?.trim().toLowerCase()
+    const normalizedMode = filters?.mode?.trim().toLowerCase()
+
+    if (normalizedLevel || normalizedMode) {
+      const tierWhere: any = {
+        price_inr: { gt: 0 },
+      }
+
+      if (normalizedLevel) {
+        tierWhere.level = { equals: normalizedLevel }
+      }
+
+      if (normalizedMode) {
+        tierWhere.mode = { equals: normalizedMode }
+      }
+
+      const instrumentWhere: any = {
+        teacher_instrument_tiers: {
+          some: tierWhere,
+        },
+      }
+
+      // If instrument filter is present, ensure level/mode match within that instrument
+      if (filters?.instrument) {
+        instrumentWhere.instrument = { contains: filters.instrument, mode: 'insensitive' }
+        instrumentWhere.teach_or_perform = { equals: 'teach', mode: 'insensitive' }
+      }
+
       AND.push({
         teacher_instruments: {
-          some: {
-            teacher_instrument_tiers: {
-              some: {
-                level: filters.level.toLowerCase() as any,
-                price_inr: { gt: 0 },
-              },
-            },
-          },
+          some: instrumentWhere,
         },
       })
-    }
-
-    // Mode filter via class_formats array
-    if (filters?.mode) {
-      const modeLower = filters.mode.toLowerCase()
-      if (modeLower === 'online') {
-        AND.push({
-          teacher_formats: {
-            class_formats: { hasSome: ['Online'] },
-          },
-        })
-      } else if (modeLower === 'offline') {
-        AND.push({
-          teacher_formats: {
-            class_formats: { hasSome: ["At Student's Place", "At Teacher's Place"] },
-          },
-        })
-      }
     }
 
     if (AND.length > 0) {

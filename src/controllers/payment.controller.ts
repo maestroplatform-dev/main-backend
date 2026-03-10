@@ -302,6 +302,15 @@ export class PaymentController {
           is_demo: b.is_demo,
           duration_minutes: b.duration_minutes,
           notes: b.notes,
+        })),
+        payments: (pkg.purchase_payments || []).map((payment, idx) => ({
+          id: payment.id,
+          tranche_number: idx + 1,
+          amount: Number(payment.amount),
+          sessions_covered: payment.sessions_covered,
+          status: payment.status,
+          razorpay_payment_id: payment.razorpay_payment_id,
+          completed_at: payment.completed_at?.toISOString() || null,
         }))
       }));
 
@@ -391,7 +400,15 @@ export class PaymentController {
           duration_minutes: b.duration_minutes,
           notes: b.notes,
         })),
-        payments: pkg.purchase_payments || []
+        payments: (pkg.purchase_payments || []).map((payment, idx) => ({
+          id: payment.id,
+          tranche_number: idx + 1,
+          amount: Number(payment.amount),
+          sessions_covered: payment.sessions_covered,
+          status: payment.status,
+          razorpay_payment_id: payment.razorpay_payment_id,
+          completed_at: payment.completed_at?.toISOString() || null,
+        }))
       };
 
       return res.status(200).json({

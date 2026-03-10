@@ -169,6 +169,67 @@ export class PaymentService {
   }
 
   /**
+   * Find an ACTIVE/PAUSED package that can be topped up for the same
+   * teacher + instrument + level + mode.
+   */
+  private async findCompatiblePackage(
+    studentId: string,
+    teacherId: string,
+    instrument: string,
+    level: string,
+    mode: string,
+  ) {
+    const now = new Date();
+
+    // Keep package states fresh before matching
+    await prisma.purchased_packages.updateMany({
+      where: {
+        student_id: studentId,
+        teacher_id: teacherId,
+        status: {
+          in: ['ACTIVE', 'PAUSED']
+        },
+        expires_at: {
+          lt: now,
+        },
+      },
+      data: {
+        status: 'EXPIRED',
+      },
+    });
+
+    await prisma.purchased_packages.updateMany({
+      where: {
+        student_id: studentId,
+        teacher_id: teacherId,
+        status: 'ACTIVE',
+        classes_remaining: {
+          lte: 0,
+        },
+      },
+      data: {
+        status: 'COMPLETED',
+      },
+    });
+
+    return prisma.purchased_packages.findFirst({
+      where: {
+        student_id: studentId,
+        teacher_id: teacherId,
+        instrument: { equals: instrument, mode: 'insensitive' },
+        level: { equals: level, mode: 'insensitive' },
+        mode: { equals: mode, mode: 'insensitive' },
+        status: {
+          in: ['ACTIVE', 'PAUSED'],
+        },
+      },
+      orderBy: {
+        purchased_at: 'desc',
+      },
+    });
+  }
+
+  /**
    * Validates that selected schedule slots are available for the teacher
    */
   async validateSchedule(data: ValidateScheduleRequest): Promise<ValidateScheduleResponse> {
@@ -244,12 +305,6 @@ export class PaymentService {
       },
       data: { status: 'EXPIRED' },
     });
-
-    // Validate no existing package
-    const canPurchase = await this.validateNoExistingPackage(student_id, teacher_id);
-    if (!canPurchase) {
-      throw new Error('You already have an active package with this teacher');
-    }
 
     // Determine classes count and validity
     let classesCount: number;
@@ -368,8 +423,21 @@ export class PaymentService {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + validityDays);
 
-    // Create purchased package in PENDING status
-    const purchasedPackage = await prisma.purchased_packages.create({
+    // Merge behavior:
+    // - Same teacher + instrument + level + mode => top up existing package
+    // - Different mode/level/instrument => create separate package
+    const compatiblePackage = await this.findCompatiblePackage(
+      student_id,
+      teacher_id,
+      instrument,
+      level,
+      mode,
+    );
+
+    const isTopUp = Boolean(compatiblePackage);
+
+    // Create purchased package in PENDING status only when there is no compatible package to top up
+    const purchasedPackage = compatiblePackage || await prisma.purchased_packages.create({
       data: {
         student_id,
         package_id: package_id || null,
@@ -415,6 +483,10 @@ export class PaymentService {
         sessions_covered: effectiveSessionsToPay,
         status: 'PENDING',
         metadata: {
+          is_topup: isTopUp,
+          classes_to_add: classesCount,
+          total_price_increment: totalPackagePrice,
+          per_session_price: pricePerSession,
           scheduled_sessions: scheduled_sessions
         }
       }
@@ -484,16 +556,77 @@ export class PaymentService {
 
     // Step 3: Fetch payment details from Razorpay to verify amount
     const razorpayPayment = await getRazorpayInstance().payments.fetch(razorpay_payment_id);
-    const paidAmount = Number(razorpayPayment.amount) / 100; // Convert from paisa
+    const paidAmountInPaisa = Number(razorpayPayment.amount);
+    const expectedAmountInPaisa = Math.round(Number(paymentRecord.amount) * 100);
+    let razorpayOrderAmountInPaisa: number | null = null;
 
-    if (paidAmount !== Number(paymentRecord.amount)) {
+    // Razorpay is source of truth for collected amount; cross-check order amount
+    // to handle occasional DB float/rounding drift in stored rupee values.
+    try {
+      const razorpayOrder = await getRazorpayInstance().orders.fetch(razorpay_order_id);
+      razorpayOrderAmountInPaisa = Number((razorpayOrder as any)?.amount);
+    } catch (orderFetchError) {
+      console.warn('⚠️ Could not fetch Razorpay order during verifyPayment:', orderFetchError);
+    }
+
+    // Ensure payment belongs to the same order
+    const paymentOrderId = (razorpayPayment as any)?.order_id;
+    if (paymentOrderId && paymentOrderId !== razorpay_order_id) {
       await prisma.purchase_payments.update({
         where: { id: paymentRecord.id },
-        data: { status: 'FAILED', metadata: { error: 'Amount mismatch', expected: paymentRecord.amount, received: paidAmount } }
+        data: {
+          status: 'FAILED',
+          metadata: {
+            error: 'Order mismatch',
+            expected_order_id: razorpay_order_id,
+            payment_order_id: paymentOrderId,
+          }
+        }
+      });
+      await this.markPendingPackageFailed(purchased_package_id, 'order_mismatch');
+      throw new Error('Payment order mismatch');
+    }
+
+    const strictMatch = paidAmountInPaisa === expectedAmountInPaisa;
+    const orderAmountMatchesExpected =
+      razorpayOrderAmountInPaisa !== null &&
+      Number.isFinite(razorpayOrderAmountInPaisa) &&
+      razorpayOrderAmountInPaisa === expectedAmountInPaisa;
+
+    if (!strictMatch && !orderAmountMatchesExpected) {
+      await prisma.purchase_payments.update({
+        where: { id: paymentRecord.id },
+        data: {
+          status: 'FAILED',
+          metadata: {
+            error: 'Amount mismatch',
+            expected_rupees: Number(paymentRecord.amount),
+            received_rupees: paidAmountInPaisa / 100,
+            expected_paise: expectedAmountInPaisa,
+            received_paise: paidAmountInPaisa,
+            razorpay_order_paise: razorpayOrderAmountInPaisa,
+          }
+        }
       });
       await this.markPendingPackageFailed(purchased_package_id, 'amount_mismatch');
       throw new Error('Payment amount mismatch');
     }
+
+    if (!strictMatch && orderAmountMatchesExpected) {
+      console.warn('⚠️ Amount drift resolved using Razorpay order amount (payment amount may include fees)', {
+        paymentRecordId: paymentRecord.id,
+        expectedAmountInPaisa,
+        paidAmountInPaisa,
+        razorpayOrderAmountInPaisa,
+      });
+    }
+
+    // Credit only the order amount (not payment gross amount which can include fees)
+    const creditedAmountInPaisa =
+      razorpayOrderAmountInPaisa !== null && Number.isFinite(razorpayOrderAmountInPaisa)
+        ? razorpayOrderAmountInPaisa
+        : expectedAmountInPaisa;
+    const paidAmount = creditedAmountInPaisa / 100;
 
     // Step 4: Update payment record
     // Preserve the scheduled_sessions from original metadata
@@ -504,11 +637,15 @@ export class PaymentService {
       data: {
         razorpay_payment_id,
         razorpay_signature,
+        amount: paidAmount,
         status: 'SUCCESS',
         payment_method: razorpayPayment.method,
         completed_at: new Date(),
         metadata: {
           scheduled_sessions: scheduledSessions,
+          credited_amount_paise: creditedAmountInPaisa,
+          payment_amount_paise: paidAmountInPaisa,
+          order_amount_paise: razorpayOrderAmountInPaisa,
           razorpay_response: JSON.parse(JSON.stringify(razorpayPayment))
         }
       }
@@ -516,16 +653,27 @@ export class PaymentService {
 
     // Step 5: Update purchased package
     const purchasedPackage = paymentRecord.purchased_packages;
+    const paymentMetadata = (paymentRecord.metadata as any) || {};
+    const isTopUp = Boolean(paymentMetadata.is_topup);
+    const classesToAdd = isTopUp ? Number(paymentMetadata.classes_to_add || 0) : 0;
+    const totalPriceIncrement = isTopUp ? Number(paymentMetadata.total_price_increment || 0) : 0;
+
     const newAmountPaid = Number(purchasedPackage.amount_paid) + paidAmount;
     const newSessionsPaid = purchasedPackage.sessions_paid + paymentRecord.sessions_covered;
+    const updatedTotalPackagePrice = Number(purchasedPackage.total_package_price) + totalPriceIncrement;
+    const updatedClassesTotal = purchasedPackage.classes_total + classesToAdd;
+    const updatedClassesRemaining = purchasedPackage.classes_remaining + classesToAdd;
 
     await prisma.purchased_packages.update({
       where: { id: purchased_package_id },
       data: {
         status: 'ACTIVE',
         amount_paid: newAmountPaid,
-        amount_remaining: Number(purchasedPackage.total_package_price) - newAmountPaid,
-        sessions_paid: newSessionsPaid
+        total_package_price: updatedTotalPackagePrice,
+        amount_remaining: updatedTotalPackagePrice - newAmountPaid,
+        sessions_paid: newSessionsPaid,
+        classes_total: updatedClassesTotal,
+        classes_remaining: updatedClassesRemaining,
       }
     });
 

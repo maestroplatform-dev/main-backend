@@ -1,6 +1,5 @@
 import prisma from "../config/database";
 import {
-  ActivityEvent,
   RecipientRole,
   WhatsAppNotificationService,
 } from "./whatsapp-notification.service";
@@ -42,6 +41,9 @@ const TEACHER_EMAIL_TRIGGER_MAP: Partial<Record<BookingNotificationOptions["even
 export class ActivityNotificationService {
   private static DISPLAY_TIMEZONE = "Asia/Kolkata";
   private static DASHBOARD_URL = process.env.STUDENT_DASHBOARD_URL || "https://maestera.com";
+  private static TRIGGER_TO_11ZA_TEMPLATE_FALLBACK: Record<string, string> = {
+    SESSION_CANCELLED_BY_TEACHER: "session_cancelled_by_teacher_student_v2",
+  };
 
   private static SCHEDULE_OR_RESCHEDULE_EVENTS: ReadonlySet<BookingNotificationOptions["event"]> = new Set([
     "SESSION_SCHEDULED_BY_TEACHER",
@@ -101,28 +103,6 @@ export class ActivityNotificationService {
       .split("_")
       .map((w) => w.charAt(0) + w.slice(1).toLowerCase())
       .join(" ");
-  }
-
-  private static async notifyRecipient(
-    event: ActivityEvent,
-    recipientRole: RecipientRole,
-    recipientPhone: string | null | undefined,
-    whatsappVerified: boolean,
-    whatsappOptIn: boolean,
-    variables: Record<string, string | number | boolean | null | undefined>
-  ) {
-    if (!recipientPhone || !whatsappVerified || !whatsappOptIn) return;
-
-    try {
-      await WhatsAppNotificationService.sendActivityNotification({
-        event,
-        recipientRole,
-        recipientPhone,
-        variables,
-      });
-    } catch (error) {
-      console.error("[activity-notification] WhatsApp send failed:", error);
-    }
   }
 
   /**
@@ -226,15 +206,6 @@ export class ActivityNotificationService {
         ? this.formatDateTime(booking.rescheduled_at, booking.duration_minutes || 60)
         : this.formatDateTime(booking.scheduled_at, booking.duration_minutes || 60);
 
-    // Variables for WhatsApp (11za flat object)
-    const whatsappVars = {
-      student_name: studentName,
-      teacher_name: teacherName,
-      session_date: dateTime.date,
-      session_time: dateTime.time,
-      initiated_by: options.initiatedBy === "teacher" ? "Teacher" : "Student",
-    };
-
     // Variables matching DB template {{Placeholder}} format
     const templateVars: Record<string, string> = {
       "Student Name": studentName,
@@ -256,56 +227,15 @@ export class ActivityNotificationService {
     const teacherEmail = booking.teachers.profiles?.users?.email;
 
     if (isScheduleOrReschedule) {
-      // WhatsApp → counterpart, Email → both sides (from DB templates)
-      const counterpartRole: RecipientRole =
-        options.initiatedBy === "teacher" ? "student" : "teacher";
-
-      const counterpart =
-        counterpartRole === "teacher"
-          ? {
-              phone: booking.teachers.whatsapp_number,
-              verified: Boolean(booking.teachers.whatsapp_verified_at),
-              optIn: booking.teachers.whatsapp_opt_in ?? true,
-            }
-          : {
-              phone: booking.students.whatsapp_number,
-              verified: Boolean(booking.students.whatsapp_verified_at),
-              optIn: booking.students.whatsapp_opt_in ?? true,
-            };
-
       await Promise.allSettled([
-        this.notifyRecipient(
-          options.event,
-          counterpartRole,
-          counterpart.phone,
-          counterpart.verified,
-          counterpart.optIn,
-          whatsappVars
-        ),
         this.sendTemplateEmail(studentEmail, studentTrigger, templateVars),
         teacherTrigger
           ? this.sendTemplateEmail(teacherEmail, teacherTrigger, templateVars)
           : Promise.resolve(),
       ]);
     } else {
-      // Cancellation — WhatsApp to both + email to both via templates
+      // Cancellation — email to both via templates
       await Promise.allSettled([
-        this.notifyRecipient(
-          options.event,
-          "teacher",
-          booking.teachers.whatsapp_number,
-          Boolean(booking.teachers.whatsapp_verified_at),
-          booking.teachers.whatsapp_opt_in ?? true,
-          whatsappVars
-        ),
-        this.notifyRecipient(
-          options.event,
-          "student",
-          booking.students.whatsapp_number,
-          Boolean(booking.students.whatsapp_verified_at),
-          booking.students.whatsapp_opt_in ?? true,
-          whatsappVars
-        ),
         this.sendTemplateEmail(studentEmail, studentTrigger, templateVars),
         teacherTrigger
           ? this.sendTemplateEmail(teacherEmail, teacherTrigger, templateVars)
@@ -361,16 +291,6 @@ export class ActivityNotificationService {
     const teacherName = purchasedPackage.teachers.name || "Teacher";
     const instrument = purchasedPackage.instrument || "Music";
 
-    const whatsappVars = {
-      student_name: studentName,
-      teacher_name: teacherName,
-      instrument,
-      level: purchasedPackage.level || "-",
-      mode: purchasedPackage.mode || "online",
-      classes_total: purchasedPackage.classes_total,
-      amount_paid: String(purchasedPackage.amount_paid),
-    };
-
     const firstSession = await prisma.bookings.findFirst({
       where: {
         purchased_package_id: purchasedPackage.id,
@@ -399,22 +319,6 @@ export class ActivityNotificationService {
     };
 
     await Promise.allSettled([
-      this.notifyRecipient(
-        "PACKAGE_PURCHASED",
-        "teacher",
-        purchasedPackage.teachers.whatsapp_number,
-        Boolean(purchasedPackage.teachers.whatsapp_verified_at),
-        purchasedPackage.teachers.whatsapp_opt_in ?? true,
-        whatsappVars
-      ),
-      this.notifyRecipient(
-        "PACKAGE_PURCHASED",
-        "student",
-        purchasedPackage.students.whatsapp_number,
-        Boolean(purchasedPackage.students.whatsapp_verified_at),
-        purchasedPackage.students.whatsapp_opt_in ?? true,
-        whatsappVars
-      ),
       this.sendTemplateEmail(
         purchasedPackage.students.profiles?.users?.email,
         "PAYMENT_SUCCESS",
@@ -916,13 +820,28 @@ export class ActivityNotificationService {
       const tpl = await NotificationTemplateService.getTemplate(triggerKey);
       if (!tpl || !tpl.is_active || !tpl.whatsapp_body) return;
 
-      // For now, we still use 11za template-based sending for events that
-      // have 11za templates configured. For templates that only exist in DB
-      // (reminders, demo flows), the WhatsApp body is logged but not sent
-      // since 11za requires pre-approved templates on their platform.
-      // When 11za templates are created for these triggers, the WhatsApp
-      // notification service can be extended to support them.
-      console.log(`[activity-notification] WhatsApp template "${triggerKey}" ready for: ${recipientPhone}`);
+      const configuredVariables = Array.isArray(tpl.variables)
+        ? (tpl.variables as unknown[]).filter((item): item is string => typeof item === "string")
+        : [];
+
+      const variableValues = configuredVariables.length > 0
+        ? configuredVariables.map((key) => String(variables[key] ?? ""))
+        : Object.values(variables).map((value) => String(value ?? ""));
+
+      const templateEnvKey = `WHATSAPP_11ZA_TEMPLATE_${triggerKey}`;
+      const templateName =
+        process.env[templateEnvKey] ||
+        this.TRIGGER_TO_11ZA_TEMPLATE_FALLBACK[triggerKey] ||
+        triggerKey.toLowerCase();
+      const recipientRole: RecipientRole = triggerKey.startsWith("TEACHER_") ? "teacher" : "student";
+
+      await WhatsAppNotificationService.sendTemplateNotification({
+        templateName,
+        recipientRole,
+        recipientPhone,
+        variableValues,
+        tagEvent: triggerKey,
+      });
     } catch (error) {
       console.error(`[activity-notification] WhatsApp template "${triggerKey}" failed:`, error);
     }

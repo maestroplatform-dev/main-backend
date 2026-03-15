@@ -16,6 +16,14 @@ interface WhatsAppNotificationInput {
   variables: Record<string, string | number | boolean | null | undefined>;
 }
 
+interface WhatsAppTemplateInput {
+  templateName: string;
+  recipientRole: RecipientRole;
+  recipientPhone: string;
+  variableValues: string[];
+  tagEvent?: string;
+}
+
 const TEMPLATE_MAP: Record<Exclude<ActivityEvent,
   | "SESSION_SCHEDULED_BY_TEACHER"
   | "SESSION_SCHEDULED_BY_STUDENT"
@@ -223,6 +231,47 @@ export class WhatsAppNotificationService {
     }
 
     await this.sendWithOriginFallback(payload, input.event);
+  }
+
+  static async sendTemplateNotification(input: WhatsAppTemplateInput): Promise<void> {
+    if (!this.isEnabled()) {
+      return;
+    }
+
+    if (this.getProvider() !== "11za") {
+      console.warn("[whatsapp] Unsupported provider configured:", this.getProvider());
+      return;
+    }
+
+    const apiUrl = this.getApiUrl();
+    const apiKey = this.getApiKey();
+    if (!apiUrl || !apiKey) {
+      console.warn("[whatsapp] WHATSAPP_11ZA_API_URL or WHATSAPP_11ZA_API_KEY is missing");
+      return;
+    }
+
+    const normalizedPhone = this.normalizePhone(input.recipientPhone);
+    if (!normalizedPhone) {
+      console.warn("[whatsapp] Recipient phone missing/invalid for template:", input.templateName);
+      return;
+    }
+
+    const payload = {
+      authToken: apiKey,
+      sendto: this.to11zaSendTo(normalizedPhone),
+      templateName: input.templateName,
+      language: this.getLanguage(),
+      name: input.recipientRole === "teacher" ? "Teacher" : "Student",
+      data: input.variableValues,
+      tags: `event:${input.tagEvent || input.templateName},role:${input.recipientRole}`,
+    };
+
+    if (process.env.WHATSAPP_DRY_RUN === "true") {
+      console.log("[whatsapp][dry-run][template]", JSON.stringify(payload));
+      return;
+    }
+
+    await this.sendWithOriginFallback(payload, input.templateName);
   }
 
   static async sendOtpNotification(input: {

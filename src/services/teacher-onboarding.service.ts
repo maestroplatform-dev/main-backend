@@ -5,6 +5,47 @@ import { computeTotalPrice, buildPricingConfig } from '../utils/pricing'
 import { ActivityNotificationService } from './activity-notification.service'
 
 export class TeacherOnboardingService {
+  private static buildOnboardingCallbackUrl(): string | null {
+    if (process.env.N8N_ONBOARDING_CALLBACK_URL) return process.env.N8N_ONBOARDING_CALLBACK_URL
+    if (process.env.API_BASE_URL) {
+      return `${process.env.API_BASE_URL.replace(/\/$/, '')}/api/v1/teachers/onboarding/n8n-callback`
+    }
+    return null
+  }
+
+  private static async sendToN8n(payload: {
+    teacherId: string
+    inputType: 'resume' | 'text'
+    resumeUrl?: string
+    aboutText?: string
+  }) {
+    const webhookUrl = process.env.N8N_ONBOARDING_WEBHOOK_URL
+    if (!webhookUrl) {
+      return { queued: false, reason: 'N8N_ONBOARDING_WEBHOOK_URL not configured' }
+    }
+
+    const callbackUrl = this.buildOnboardingCallbackUrl()
+
+    const response = await fetch(webhookUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(process.env.N8N_CALLBACK_SECRET ? { Authorization: `Bearer ${process.env.N8N_CALLBACK_SECRET}` } : {}),
+      },
+      body: JSON.stringify({
+        ...payload,
+        callbackUrl,
+      }),
+    })
+
+    if (!response.ok) {
+      const body = await response.text()
+      return { queued: false, reason: `n8n rejected request (${response.status}): ${body}` }
+    }
+
+    return { queued: true }
+  }
+
   // Complete onboarding 
   static async completeOnboarding(teacherId: string, data: TeacherCompleteOnboardingInput) {
     const teacher = await prisma.teachers.findUnique({
@@ -343,6 +384,84 @@ export class TeacherOnboardingService {
       teacher_engagements: engagements,
       teacher_formats: formats,
       teacher_instruments: normalizedInstruments,
+    }
+  }
+
+  static async processBackground(
+    teacherId: string,
+    data: {
+      inputType: 'resume' | 'text'
+      resumeUrl?: string
+      aboutText?: string
+    }
+  ) {
+    const teacher = await prisma.teachers.findUnique({ where: { id: teacherId } })
+    if (!teacher) {
+      throw new AppError(404, 'Teacher not found', 'TEACHER_NOT_FOUND')
+    }
+
+    const seedText = data.inputType === 'resume'
+      ? `Resume submitted: ${data.resumeUrl || ''}`
+      : (data.aboutText || '').trim()
+
+    await prisma.teachers.update({
+      where: { id: teacherId },
+      data: {
+        professional_experience: seedText || teacher.professional_experience || null,
+        bio: data.inputType === 'text'
+          ? seedText || teacher.bio || null
+          : teacher.bio,
+      },
+    })
+
+    const n8nResult = await this.sendToN8n({
+      teacherId,
+      inputType: data.inputType,
+      resumeUrl: data.resumeUrl,
+      aboutText: data.aboutText,
+    })
+
+    return {
+      accepted: true,
+      n8n: n8nResult,
+    }
+  }
+
+  static async applyN8nProfileExtraction(data: {
+    teacherId: string
+    aboutMe?: string
+    tagline?: string
+    teachingStyle?: string
+    educationalBackground?: string
+    professionalExperience?: string
+  }) {
+    const teacher = await prisma.teachers.findUnique({ where: { id: data.teacherId } })
+    if (!teacher) {
+      throw new AppError(404, 'Teacher not found', 'TEACHER_NOT_FOUND')
+    }
+
+    const updated = await prisma.teachers.update({
+      where: { id: data.teacherId },
+      data: {
+        bio: data.aboutMe ?? teacher.bio,
+        tagline: data.tagline ?? teacher.tagline,
+        teaching_style: data.teachingStyle ?? teacher.teaching_style,
+        education: data.educationalBackground ?? teacher.education,
+        professional_experience: data.professionalExperience ?? teacher.professional_experience,
+      },
+      select: {
+        id: true,
+        bio: true,
+        tagline: true,
+        teaching_style: true,
+        education: true,
+        professional_experience: true,
+      },
+    })
+
+    return {
+      updated: true,
+      teacher: updated,
     }
   }
 

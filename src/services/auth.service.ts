@@ -21,45 +21,65 @@ export class AuthService {
 
   // Register user - create profile
   static async register(userId: string, email: string, name: string, role: string) {
-    // Check if profile already exists
-    const existing = await prisma.profiles.findUnique({
-      where: { id: userId },
-    })
-
-    if (existing) {
-      throw new AppError(409, 'Profile already exists', 'PROFILE_EXISTS')
-    }
-
-    // Create profile
-    const profile = await prisma.profiles.create({
-      data: {
-        id: userId,
-        name,
-        role,
-        is_active: true,
-      },
-    })
-
-    // If teacher, create teacher record
-    if (role === 'teacher') {
-      await prisma.teachers.create({
-        data: {
-          id: userId,
-            name,
-          verified: false,
-        },
+    // Keep registration idempotent so partially-onboarded auth users can recover.
+    const profile = await prisma.$transaction(async (tx) => {
+      const existing = await tx.profiles.findUnique({
+        where: { id: userId },
       })
-    }
 
-    // If student, create student record
-    if (role === 'student') {
-      await prisma.students.create({
-        data: {
-          id: userId,
+      let upsertedProfile
+      if (!existing) {
+        upsertedProfile = await tx.profiles.create({
+          data: {
+            id: userId,
             name,
-        },
-      })
-    }
+            role,
+            is_active: true,
+          },
+        })
+      } else {
+        if (existing.role !== role) {
+          throw new AppError(409, 'Profile already exists with a different role', 'ROLE_MISMATCH')
+        }
+
+        upsertedProfile = await tx.profiles.update({
+          where: { id: userId },
+          data: {
+            name: existing.name || name,
+            is_active: true,
+          },
+        })
+      }
+
+      if (role === 'teacher') {
+        await tx.teachers.upsert({
+          where: { id: userId },
+          update: {
+            name,
+          },
+          create: {
+            id: userId,
+            name,
+            verified: false,
+          },
+        })
+      }
+
+      if (role === 'student') {
+        await tx.students.upsert({
+          where: { id: userId },
+          update: {
+            name,
+          },
+          create: {
+            id: userId,
+            name,
+          },
+        })
+      }
+
+      return upsertedProfile
+    })
 
     // Audit log for admin creation
     if (role === 'admin') {

@@ -29,6 +29,18 @@ router.get(
   asyncHandler(TeacherOnboardingController.getOnboardingData)
 )
 
+router.post(
+  '/onboarding/process-background',
+  authenticateUser,
+  requireRole('teacher'),
+  asyncHandler(TeacherOnboardingController.processBackground)
+)
+
+router.post(
+  '/onboarding/n8n-callback',
+  asyncHandler(TeacherOnboardingController.handleN8nCallback)
+)
+
 // Engagement preferences endpoints
 router.post(
   '/engagement-preferences',

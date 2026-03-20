@@ -946,11 +946,16 @@ export class BookingService {
       throw new Error("You cannot confirm your own reschedule proposal");
     }
 
+    // Generate meeting link if not already present
+    const meetingId = nanoid(12);
+    const meetingLink = booking.meeting_link || `https://meet.jit.si/Maestera-Session-${meetingId}`;
+
     const updatedReschedule = await prisma.bookings.update({
       where: { id: bookingId },
       data: {
         status: "SCHEDULED",
         scheduled_at: booking.rescheduled_at,
+        meeting_link: meetingLink,
         rescheduled_at: null,
         rescheduled_by: null,
         updated_at: new Date(),

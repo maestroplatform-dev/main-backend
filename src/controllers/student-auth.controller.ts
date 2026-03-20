@@ -125,6 +125,13 @@ export class StudentAuthController {
             gender: result.student.gender,
             profile_picture_url: result.student.profile_picture_url,
           },
+          session: result.session
+            ? {
+                access_token: result.session.access_token,
+                refresh_token: result.session.refresh_token,
+                expires_in: result.session.expires_in,
+              }
+            : null,
         },
       })
     } catch (error) {

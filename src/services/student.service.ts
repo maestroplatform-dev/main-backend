@@ -74,6 +74,7 @@ export class StudentService {
 
     try {
       // Create profile
+      logger.debug({ userId, name: data.name }, 'Creating profile...')
       const profile = await prisma.profiles.create({
         data: {
           id: userId,
@@ -82,8 +83,10 @@ export class StudentService {
           is_active: true,
         },
       })
+      logger.debug({ userId, profileId: profile.id }, '✅ Profile created')
 
       // Create student record
+      logger.debug({ userId, studentName: data.name }, 'Creating student record...')
       const student = await prisma.students.create({
         data: {
           id: userId,
@@ -98,17 +101,40 @@ export class StudentService {
           profile_picture_url: null,
         },
       })
+      logger.debug({ userId, studentId: student.id }, '✅ Student record created')
 
       logger.info({ userId, email: data.email }, '✅ Student email signup completed')
+
+      // Get session token for the newly created user
+      logger.debug({ email: data.email }, 'Generating session token for new user...')
+      const { data: sessionData, error: sessionError } = await supabaseAdmin.auth.signInWithPassword({
+        email: data.email,
+        password: data.password,
+      })
+
+      if (sessionError || !sessionData.session) {
+        logger.warn(
+          { userId, email: data.email, error: sessionError },
+          '⚠️  Could not generate session token after signup (user still created)'
+        )
+      } else {
+        logger.debug({ userId }, '✅ Session token generated')
+      }
 
       // Send welcome email
       void ActivityNotificationService.notifyStudentSignup(userId, data.name, data.email).catch((e) =>
         logger.error({ error: e }, 'Failed to send student welcome email')
       )
 
-      return { user: signUpData.user, profile, student }
+      return {
+        user: signUpData.user,
+        profile,
+        student,
+        session: sessionData?.session || null, // Include session in response
+      }
     } catch (error) {
       // Rollback: Delete Supabase user if student creation fails
+      logger.error({ userId, error }, '❌ Failed to create student profile/record, rolling back user creation...')
       await supabaseAdmin.auth.admin.deleteUser(userId)
       logger.error({ userId, error }, '❌ Failed to create student profile, rolled back user')
       throw error

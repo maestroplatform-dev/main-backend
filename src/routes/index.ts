@@ -13,7 +13,7 @@ import conversationRoutes from './conversation.routes'
 import supportRoutes from './support.routes'
 import quizResponseRoutes from './quiz-responses.routes'
 import whatsappRoutes from './whatsapp.routes'
-import { authenticateUser } from '../middleware/auth'
+import { authenticateStudentUser } from '../middleware/auth'
 
 const router = Router()
 
@@ -26,7 +26,7 @@ router.use(testRoutes)
 // API v1 routes
 router.use('/api/v1/auth', authRoutes)
 router.use('/api/v1/auth/student', studentAuthRoutes)
-router.use('/api/v1/student', authenticateUser, studentAuthRoutes)
+router.use('/api/v1/student', authenticateStudentUser, studentAuthRoutes)
 router.use('/api/v1/student', studentPreferencesRoutes)
 router.use('/api/v1/teachers', teacherRoutes)
 router.use('/api/v1/admin', adminRoutes)

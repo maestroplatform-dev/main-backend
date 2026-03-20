@@ -1,55 +1,7 @@
 import { Response, NextFunction } from 'express'
-import { createClient, User } from '@supabase/supabase-js'
 import { supabaseAdmin } from '../config/supabase'
 import prisma from '../config/database'
 import { AuthRequest, AppError } from '../types'
-
-function decodeJwtPayload(token: string): Record<string, unknown> | null {
-  try {
-    const parts = token.split('.')
-    if (parts.length < 2) return null
-
-    const payload = Buffer.from(parts[1], 'base64url').toString('utf8')
-    return JSON.parse(payload)
-  } catch {
-    return null
-  }
-}
-
-async function getSupabaseUserFromToken(token: string): Promise<User | null> {
-  const primaryResult = await supabaseAdmin.auth.getUser(token)
-  if (primaryResult.data.user) {
-    return primaryResult.data.user
-  }
-
-  const payload = decodeJwtPayload(token)
-  const tokenIssuer = typeof payload?.iss === 'string' ? payload.iss : ''
-  if (!tokenIssuer.startsWith('http')) {
-    return null
-  }
-
-  const issuerBaseUrl = tokenIssuer.replace(/\/auth\/v1\/?$/, '')
-  const configuredUrl = process.env.SUPABASE_URL || ''
-
-  if (!issuerBaseUrl || issuerBaseUrl === configuredUrl) {
-    return null
-  }
-
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
-  if (!serviceRoleKey) {
-    return null
-  }
-
-  const issuerClient = createClient(issuerBaseUrl, serviceRoleKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  })
-
-  const fallbackResult = await issuerClient.auth.getUser(token)
-  return fallbackResult.data.user || null
-}
 
 // Validate Supabase token only (no profile required)
 export async function validateSupabaseToken(
@@ -66,8 +18,8 @@ export async function validateSupabaseToken(
 
     const token = authHeader.substring(7)
 
-    const user = await getSupabaseUserFromToken(token)
-    if (!user) {
+    const { data: { user }, error } = await supabaseAdmin.auth.getUser(token)
+    if (error || !user) {
       throw new AppError(401, 'Invalid token', 'INVALID_TOKEN')
     }
 
@@ -92,8 +44,8 @@ export async function authenticateUser(
 
     const token = authHeader.substring(7)
 
-    const user = await getSupabaseUserFromToken(token)
-    if (!user) {
+    const { data: { user }, error } = await supabaseAdmin.auth.getUser(token)
+    if (error || !user) {
       throw new AppError(401, 'Invalid token', 'INVALID_TOKEN')
     }
 

@@ -1,6 +1,7 @@
 type ActivityEvent =
   | "SESSION_SCHEDULED_BY_TEACHER"
   | "SESSION_SCHEDULED_BY_STUDENT"
+  | "SESSION_SCHEDULED_BY_ADMIN"
   | "SESSION_RESCHEDULED_BY_TEACHER"
   | "SESSION_RESCHEDULED_BY_STUDENT"
   | "SESSION_CANCELLED_BY_TEACHER"
@@ -27,6 +28,7 @@ interface WhatsAppTemplateInput {
 const TEMPLATE_MAP: Record<Exclude<ActivityEvent,
   | "SESSION_SCHEDULED_BY_TEACHER"
   | "SESSION_SCHEDULED_BY_STUDENT"
+  | "SESSION_SCHEDULED_BY_ADMIN"
   | "SESSION_RESCHEDULED_BY_TEACHER"
   | "SESSION_RESCHEDULED_BY_STUDENT">, string> = {
   SESSION_CANCELLED_BY_TEACHER: "session_cancelled_by_teacher",
@@ -36,7 +38,11 @@ const TEMPLATE_MAP: Record<Exclude<ActivityEvent,
 
 export class WhatsAppNotificationService {
   private static getTemplateName(event: ActivityEvent): string {
-    if (event === "SESSION_SCHEDULED_BY_TEACHER" || event === "SESSION_SCHEDULED_BY_STUDENT") {
+    if (
+      event === "SESSION_SCHEDULED_BY_TEACHER"
+      || event === "SESSION_SCHEDULED_BY_STUDENT"
+      || event === "SESSION_SCHEDULED_BY_ADMIN"
+    ) {
       return process.env.WHATSAPP_11ZA_TEMPLATE_SESSION_SCHEDULED || "session_scheduled";
     }
 

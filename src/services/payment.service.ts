@@ -284,6 +284,14 @@ export class PaymentService {
   async createOrder(data: CreateOrderRequest): Promise<CreateOrderResponse> {
     const { student_id, package_id, teacher_id, scheduled_sessions, instrument, level, mode, payment_option } = data;
 
+    const normalizedInstrument = instrument.trim();
+    const normalizedLevel = level.trim().toLowerCase();
+    const normalizedMode = mode.trim().toLowerCase();
+
+    if (!['online', 'offline'].includes(normalizedMode)) {
+      throw new Error('Invalid mode. Allowed values are online or offline');
+    }
+
     // Determine total sessions: from sessions_count param, or from package, or from scheduled_sessions
     const requestedSessions = data.sessions_count && data.sessions_count > 0
       ? data.sessions_count
@@ -368,21 +376,25 @@ export class PaymentService {
     const teacherInstrument = await prisma.teacher_instruments.findFirst({
       where: {
         teacher_id,
-        instrument,
+        instrument: normalizedInstrument,
         teach_or_perform: { in: ['teach', 'Teach'] },
       },
       include: {
-        teacher_instrument_tiers: {
-          where: { level: level as any },
-        },
+        teacher_instrument_tiers: true,
       },
     }) as any;
 
     let totalPackagePrice: number;
     let pricePerSession: number;
 
-    if (teacherInstrument?.teacher_instrument_tiers?.[0]) {
-      const tier = teacherInstrument.teacher_instrument_tiers[0];
+    const matchingTier = teacherInstrument?.teacher_instrument_tiers?.find((tier: any) => {
+      const tierLevel = String(tier.level || '').trim().toLowerCase();
+      const tierMode = String(tier.mode || '').trim().toLowerCase();
+      return tierLevel === normalizedLevel && tierMode === normalizedMode;
+    });
+
+    if (matchingTier) {
+      const tier = matchingTier;
       const teacherBasePrice = tier.price_inr != null
         ? (typeof tier.price_inr === 'object' && typeof tier.price_inr.toNumber === 'function'
           ? tier.price_inr.toNumber()
@@ -410,10 +422,10 @@ export class PaymentService {
         pricePerSession = computePerClassPrice(teacherBasePrice, classesCount, pricingConfig ?? undefined);
         totalPackagePrice = pricePerSession * classesCount;
       } else {
-        throw new Error('Teacher pricing not configured for this instrument and level');
+        throw new Error('Teacher pricing not configured for this instrument, level, and mode');
       }
     } else {
-      throw new Error('Teacher pricing not found for the selected instrument and level');
+      throw new Error('Teacher pricing not found for the selected instrument, level, and mode');
     }
 
     const amountToPay = pricePerSession * effectiveSessionsToPay;
@@ -429,9 +441,9 @@ export class PaymentService {
     const compatiblePackage = await this.findCompatiblePackage(
       student_id,
       teacher_id,
-      instrument,
-      level,
-      mode,
+      normalizedInstrument,
+      normalizedLevel,
+      normalizedMode,
     );
 
     const isTopUp = Boolean(compatiblePackage);
@@ -442,9 +454,9 @@ export class PaymentService {
         student_id,
         package_id: package_id || null,
         teacher_id,
-        instrument,
-        level,
-        mode,
+        instrument: normalizedInstrument,
+        level: normalizedLevel,
+        mode: normalizedMode,
         classes_total: classesCount,
         classes_remaining: classesCount,
         classes_completed: 0,

@@ -110,14 +110,19 @@ export class PaymentController {
         return res.status(400).json({ error: 'Invalid payment option' });
       }
 
+      const normalizedMode = mode.trim().toLowerCase();
+      if (!['online', 'offline'].includes(normalizedMode)) {
+        return res.status(400).json({ error: 'Invalid mode. Allowed values are online or offline' });
+      }
+
       const result = await paymentService.createOrder({
         student_id: userId,
         package_id,
         teacher_id,
         scheduled_sessions: scheduled_sessions || [],
-        instrument,
-        level,
-        mode,
+        instrument: instrument.trim(),
+        level: level.trim().toLowerCase(),
+        mode: normalizedMode,
         payment_option,
         sessions_to_pay,
         sessions_count,

@@ -11,8 +11,9 @@ export class BookingController {
   async requestDemo(req: AuthRequest, res: Response) {
     try {
       const studentId = req.user?.id;
-      if (!studentId) {
-        res.status(401).json({ error: "Unauthorized" });
+      const role = req.user?.role;
+      if (!studentId || role !== "student") {
+        res.status(403).json({ error: "Student access required" });
         return;
       }
 
@@ -49,8 +50,9 @@ export class BookingController {
   async scheduleSession(req: AuthRequest, res: Response) {
     try {
       const studentId = req.user?.id;
-      if (!studentId) {
-        res.status(401).json({ error: "Unauthorized" });
+      const role = req.user?.role;
+      if (!studentId || role !== "student") {
+        res.status(403).json({ error: "Student access required" });
         return;
       }
 
@@ -86,8 +88,9 @@ export class BookingController {
   async scheduleSessionByTeacher(req: AuthRequest, res: Response) {
     try {
       const teacherId = req.user?.id;
-      if (!teacherId) {
-        res.status(401).json({ error: "Unauthorized" });
+      const role = req.user?.role;
+      if (!teacherId || role !== "teacher") {
+        res.status(403).json({ error: "Teacher access required" });
         return;
       }
 
@@ -115,6 +118,48 @@ export class BookingController {
       });
     } catch (error: any) {
       console.error("Error scheduling session by teacher:", error);
+      res.status(400).json({ error: error.message || "Failed to schedule session" });
+    }
+  }
+
+  /**
+   * POST /api/bookings/admin/schedule-session
+   * Admin schedules a package session directly
+   */
+  async scheduleSessionByAdmin(req: AuthRequest, res: Response) {
+    try {
+      const adminId = req.user?.id;
+      const role = req.user?.role;
+      if (!adminId || role !== "admin") {
+        res.status(403).json({ error: "Admin access required" });
+        return;
+      }
+
+      const { studentId, teacherId, purchasedPackageId, scheduledAt, durationMinutes } = req.body;
+
+      if (!studentId || !teacherId || !purchasedPackageId || !scheduledAt) {
+        res.status(400).json({
+          error: "studentId, teacherId, purchasedPackageId and scheduledAt are required",
+        });
+        return;
+      }
+
+      const booking = await bookingService.scheduleSessionByAdmin(
+        adminId,
+        studentId,
+        teacherId,
+        purchasedPackageId,
+        new Date(scheduledAt),
+        durationMinutes || 60
+      );
+
+      res.status(201).json({
+        success: true,
+        message: "Session scheduled successfully",
+        data: booking,
+      });
+    } catch (error: any) {
+      console.error("Error scheduling session by admin:", error);
       res.status(400).json({ error: error.message || "Failed to schedule session" });
     }
   }
@@ -384,6 +429,60 @@ export class BookingController {
     } catch (error: any) {
       console.error("Error marking booking absent:", error);
       res.status(400).json({ error: error.message || "Failed to mark booking absent" });
+    }
+  }
+
+  /**
+   * PATCH /api/bookings/:id/student-complete
+   * Student marks attendance as present
+   */
+  async markBookingCompletedByStudent(req: AuthRequest, res: Response) {
+    try {
+      const id = req.params.id as string;
+      const studentId = req.user?.id;
+
+      if (!studentId) {
+        res.status(401).json({ error: "Unauthorized" });
+        return;
+      }
+
+      const booking = await bookingService.markBookingCompletedByStudent(id, studentId);
+
+      res.json({
+        success: true,
+        message: "Attendance marked successfully",
+        data: booking,
+      });
+    } catch (error: any) {
+      console.error("Error marking booking completed by student:", error);
+      res.status(400).json({ error: error.message || "Failed to mark booking attendance" });
+    }
+  }
+
+  /**
+   * PATCH /api/bookings/:id/student-absent
+   * Student marks attendance as absent
+   */
+  async markBookingAbsentByStudent(req: AuthRequest, res: Response) {
+    try {
+      const id = req.params.id as string;
+      const studentId = req.user?.id;
+
+      if (!studentId) {
+        res.status(401).json({ error: "Unauthorized" });
+        return;
+      }
+
+      const booking = await bookingService.markBookingAbsentByStudent(id, studentId);
+
+      res.json({
+        success: true,
+        message: "Attendance marked as absent successfully",
+        data: booking,
+      });
+    } catch (error: any) {
+      console.error("Error marking booking absent by student:", error);
+      res.status(400).json({ error: error.message || "Failed to mark booking attendance" });
     }
   }
 

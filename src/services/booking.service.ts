@@ -149,6 +149,14 @@ export class BookingService {
           )
         : 0;
 
+      const normalizedLevel = String(purchasedPackage.level || "").trim().toLowerCase();
+      const learningStage =
+        normalizedLevel === "beginner"
+          ? "Beginner"
+          : normalizedLevel === "advanced"
+          ? "Advanced"
+          : "Intermediate";
+
       return {
         id: purchasedPackage.student_id,
         name:
@@ -158,7 +166,7 @@ export class BookingService {
         avatar: purchasedPackage.students.profile_picture_url,
         age,
         instrument: purchasedPackage.instrument || "Music",
-        learningStage: "Intermediate",
+        learningStage,
         mode: purchasedPackage.mode === "offline" ? "offline" : "online",
         status: purchasedPackage.classes_remaining > 0 ? "active" : "inactive",
         nextClassAt: upcomingBooking
@@ -179,8 +187,7 @@ export class BookingService {
   }
 
   /**
-   * Teacher initiates scheduling for a student's purchased package.
-   * Session stays in PENDING_APPROVAL until the student accepts.
+   * Teacher schedules a package session directly without student approval.
    */
   async scheduleSessionByTeacher(
     teacherId: string,
@@ -239,7 +246,8 @@ export class BookingService {
         purchased_package_id: purchasedPackageId,
         package_id: purchasedPackage.package_id,
         booking_type: "package_session",
-        status: "PENDING_APPROVAL",
+        status: "SCHEDULED",
+        initiated_by: "TEACHER",
         scheduled_at: scheduledAt,
         duration_minutes: durationMinutes,
         is_demo: false,
@@ -267,6 +275,104 @@ export class BookingService {
       event: "SESSION_SCHEDULED_BY_TEACHER",
     }).catch((error) => {
       console.error("Failed to send schedule notification (teacher-initiated):", error);
+    });
+
+    return booking;
+  }
+
+  /**
+   * Admin schedules a package session directly without approval.
+   */
+  async scheduleSessionByAdmin(
+    adminId: string,
+    studentId: string,
+    teacherId: string,
+    purchasedPackageId: string,
+    scheduledAt: Date,
+    durationMinutes: number = 60
+  ) {
+    const purchasedPackage = await prisma.purchased_packages.findUnique({
+      where: { id: purchasedPackageId },
+    });
+
+    if (!purchasedPackage) {
+      throw new Error("Package not found");
+    }
+
+    if (purchasedPackage.teacher_id !== teacherId) {
+      throw new Error("Selected package does not belong to this teacher");
+    }
+
+    if (purchasedPackage.student_id !== studentId) {
+      throw new Error("Selected package does not belong to this student");
+    }
+
+    if (purchasedPackage.status !== "ACTIVE") {
+      throw new Error("Package is not active");
+    }
+
+    const bookedSessions = await prisma.bookings.count({
+      where: {
+        purchased_package_id: purchasedPackageId,
+        status: { notIn: ["CANCELLED"] },
+      },
+    });
+
+    if (bookedSessions >= purchasedPackage.classes_total) {
+      throw new Error("All sessions from this package have been booked");
+    }
+
+    const hasConflict = await this.hasTeacherBookingConflict(
+      teacherId,
+      scheduledAt,
+      durationMinutes
+    );
+    if (hasConflict) {
+      throw new Error("This time slot conflicts with another booking. Please choose a different time.");
+    }
+
+    const meetingId = nanoid(12);
+    const meetingLink = `https://meet.jit.si/Maestera-Session-${meetingId}`;
+
+    const booking = await prisma.bookings.create({
+      data: {
+        student_id: studentId,
+        teacher_id: teacherId,
+        purchased_package_id: purchasedPackageId,
+        package_id: purchasedPackage.package_id,
+        booking_type: "package_session",
+        status: "SCHEDULED",
+        initiated_by: "ADMIN",
+        scheduled_at: scheduledAt,
+        duration_minutes: durationMinutes,
+        is_demo: false,
+        meeting_link: meetingLink,
+        metadata: {
+          scheduledByAdminId: adminId,
+        },
+      },
+      include: {
+        students: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        teachers: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+    });
+
+    void ActivityNotificationService.notifyBookingActivity({
+      bookingId: booking.id,
+      initiatedBy: "teacher",
+      event: "SESSION_SCHEDULED_BY_ADMIN",
+    }).catch((error) => {
+      console.error("Failed to send schedule notification (admin-initiated):", error);
     });
 
     return booking;
@@ -368,6 +474,7 @@ export class BookingService {
         package_id: purchasedPackage.package_id,
         booking_type: "package_session",
         status: "PENDING_APPROVAL",
+        initiated_by: "STUDENT",
         scheduled_at: scheduledAt,
         duration_minutes: durationMinutes,
         is_demo: false,
@@ -478,6 +585,7 @@ export class BookingService {
         teacher_id: teacherId,
         booking_type: instrument ? `demo:${instrument}` : "demo",
         status: "PENDING_APPROVAL",
+        initiated_by: "STUDENT",
         scheduled_at: scheduledAt,
         duration_minutes: DEMO_DURATION_MINUTES,
         is_demo: true,
@@ -757,11 +865,10 @@ export class BookingService {
     }
 
     if (booking.booking_type !== "demo") {
-      const teacherInitiated = Boolean(booking.meeting_link);
-      if (teacherInitiated && !isStudent) {
-        throw new Error("Only student can accept this session request");
+      if (booking.initiated_by !== "STUDENT") {
+        throw new Error("This session does not require acceptance");
       }
-      if (!teacherInitiated && !isTeacher) {
+      if (!isTeacher) {
         throw new Error("Only teacher can accept this session request");
       }
     }
@@ -793,15 +900,11 @@ export class BookingService {
         console.error('Failed to send demo approval notification:', error);
       });
     } else {
-      // Regular session accepted: notify both sides
-      const initiatedBy = isTeacher ? "teacher" : "student";
-      const event = initiatedBy === "teacher"
-        ? "SESSION_SCHEDULED_BY_TEACHER"
-        : "SESSION_SCHEDULED_BY_STUDENT";
+      // Student-initiated sessions become confirmed after teacher acceptance.
       void ActivityNotificationService.notifyBookingActivity({
         bookingId: updatedBooking.id,
-        initiatedBy,
-        event,
+        initiatedBy: "student",
+        event: "SESSION_SCHEDULED_BY_STUDENT",
       }).catch((error) => {
         console.error('Failed to send accept notification:', error);
       });
@@ -811,7 +914,9 @@ export class BookingService {
   }
 
   /**
-   * Teacher proposes a new time (reschedule)
+   * Teacher or student proposes a new time
+   * - If teacher reschedules → auto-approved (moves to SCHEDULED)
+   * - If student reschedules → requires teacher approval (moves to RESCHEDULE_PROPOSED)
    */
   async rescheduleBooking(
     bookingId: string,
@@ -826,7 +931,10 @@ export class BookingService {
       throw new Error("Booking not found");
     }
 
-    if (booking.teacher_id !== userId && booking.student_id !== userId) {
+    const isTeacher = booking.teacher_id === userId;
+    const isStudent = booking.student_id === userId;
+
+    if (!isTeacher && !isStudent) {
       throw new Error("Unauthorized");
     }
 
@@ -873,12 +981,20 @@ export class BookingService {
       }
     }
 
+    // Teacher reschedules are auto-approved; student reschedules need approval
+    const isTeacherReschedule = isTeacher;
+    const finalStatus = isTeacherReschedule ? "SCHEDULED" : "RESCHEDULE_PROPOSED";
+    const meetingId = nanoid(12);
+    const meetingLink = booking.meeting_link || `https://meet.jit.si/Maestera-Session-${meetingId}`;
+
     const updatedBooking = await prisma.bookings.update({
       where: { id: bookingId },
       data: {
-        status: "RESCHEDULE_PROPOSED",
-        rescheduled_at: newScheduledAt,
+        status: finalStatus,
+        scheduled_at: isTeacherReschedule ? newScheduledAt : booking.scheduled_at,
+        rescheduled_at: !isTeacherReschedule ? newScheduledAt : null,
         rescheduled_by: userId,
+        meeting_link: isTeacherReschedule ? meetingLink : booking.meeting_link,
         updated_at: new Date(),
       },
       include: {
@@ -891,15 +1007,21 @@ export class BookingService {
       },
     });
 
-    const initiatedBy = booking.teacher_id === userId ? "teacher" : "student";
+    const initiatedBy = isTeacher ? "teacher" : "student";
 
     if (booking.is_demo) {
-      // Demo reschedule has its own templates
-      void ActivityNotificationService.notifyDemoRescheduled(updatedBooking.id, initiatedBy).catch((error) => {
-        console.error("Failed to send demo reschedule notification:", error);
-      });
+      // Demo reschedule notifications
+      if (isTeacherReschedule) {
+        void ActivityNotificationService.notifyDemoRescheduled(updatedBooking.id, "teacher").catch((error) => {
+          console.error("Failed to send demo reschedule notification:", error);
+        });
+      } else {
+        void ActivityNotificationService.notifyDemoRescheduled(updatedBooking.id, "student").catch((error) => {
+          console.error("Failed to send demo reschedule notification:", error);
+        });
+      }
     } else {
-      const event = initiatedBy === "teacher"
+      const event = isTeacher
         ? "SESSION_RESCHEDULED_BY_TEACHER"
         : "SESSION_RESCHEDULED_BY_STUDENT";
 
@@ -993,10 +1115,67 @@ export class BookingService {
     return updatedReschedule;
   }
 
-  /**
-   * Teacher marks a class as completed (attendance)
-   */
-  async markBookingCompleted(bookingId: string, teacherId: string) {
+  private resolveAttendanceFinalization(
+    teacherAttendance: "PENDING" | "PRESENT" | "ABSENT",
+    studentAttendance: "PENDING" | "PRESENT" | "ABSENT"
+  ): { finalStatus: "PENDING" | "PRESENT" | "ABSENT" | "DISPUTED"; bookingStatus?: booking_status } {
+    if (teacherAttendance === "PENDING" || studentAttendance === "PENDING") {
+      return { finalStatus: "PENDING" };
+    }
+
+    if (teacherAttendance === "PRESENT" && studentAttendance === "PRESENT") {
+      return { finalStatus: "PRESENT", bookingStatus: booking_status.COMPLETED };
+    }
+
+    if (teacherAttendance === "ABSENT" && studentAttendance === "ABSENT") {
+      return { finalStatus: "ABSENT", bookingStatus: booking_status.ABSENT };
+    }
+
+    return { finalStatus: "DISPUTED" };
+  }
+
+  private async updatePackageCompletionForAttendance(
+    tx: any,
+    purchasedPackageId: string | null
+  ) {
+    if (!purchasedPackageId) {
+      return;
+    }
+
+    const purchasedPackage = await tx.purchased_packages.findUnique({
+      where: { id: purchasedPackageId },
+      select: {
+        id: true,
+        classes_completed: true,
+        classes_total: true,
+      },
+    });
+
+    if (!purchasedPackage || purchasedPackage.classes_completed >= purchasedPackage.classes_total) {
+      return;
+    }
+
+    await tx.purchased_packages.update({
+      where: { id: purchasedPackage.id },
+      data: {
+        classes_completed: { increment: 1 },
+      },
+    });
+
+    const newCompleted = purchasedPackage.classes_completed + 1;
+    if (newCompleted >= purchasedPackage.classes_total) {
+      void ActivityNotificationService.notifyAllSessionsCompleted(purchasedPackage.id).catch((error) => {
+        console.error('Failed to send all-sessions-completed notification:', error);
+      });
+    }
+  }
+
+  private async markAttendance(
+    bookingId: string,
+    userId: string,
+    actor: "teacher" | "student",
+    attendance: "PRESENT" | "ABSENT"
+  ) {
     const booking = await prisma.bookings.findUnique({
       where: { id: bookingId },
     });
@@ -1005,29 +1184,85 @@ export class BookingService {
       throw new Error("Booking not found");
     }
 
-    if (booking.teacher_id !== teacherId) {
+    if (actor === "teacher" && booking.teacher_id !== userId) {
       throw new Error("Unauthorized");
     }
 
-    if (booking.status === "COMPLETED") {
-      throw new Error("Booking is already marked as completed");
+    if (actor === "student" && booking.student_id !== userId) {
+      throw new Error("Unauthorized");
     }
 
     if (booking.status !== "SCHEDULED") {
-      throw new Error("Only scheduled classes can be marked as completed");
+      throw new Error("Only scheduled classes can be marked for attendance");
     }
 
     if (new Date(booking.scheduled_at) > new Date()) {
       throw new Error("You can only mark attendance for classes that have already started");
     }
 
+    if (booking.attendance_final_status !== "PENDING") {
+      throw new Error("Attendance has already been finalized for this booking");
+    }
+
+    if (actor === "teacher" && booking.teacher_attendance !== "PENDING") {
+      throw new Error("Teacher attendance has already been marked");
+    }
+
+    if (actor === "student" && booking.student_attendance !== "PENDING") {
+      throw new Error("Student attendance has already been marked");
+    }
+
     return prisma.$transaction(async (tx) => {
-      const updatedBooking = await tx.bookings.update({
+      const now = new Date();
+      const markedBooking = await tx.bookings.update({
         where: { id: bookingId },
-        data: {
-          status: "COMPLETED",
-          updated_at: new Date(),
-        },
+        data: actor === "teacher"
+          ? {
+              teacher_attendance: attendance,
+              teacher_attendance_marked_at: now,
+              updated_at: now,
+            }
+          : {
+              student_attendance: attendance,
+              student_attendance_marked_at: now,
+              updated_at: now,
+            },
+      });
+
+      const finalization = this.resolveAttendanceFinalization(
+        markedBooking.teacher_attendance,
+        markedBooking.student_attendance
+      );
+
+      let finalizedBooking = markedBooking;
+      if (finalization.finalStatus !== "PENDING") {
+        finalizedBooking = await tx.bookings.update({
+          where: { id: bookingId },
+          data: {
+            attendance_final_status: finalization.finalStatus,
+            attendance_finalized_at: now,
+            ...(finalization.bookingStatus ? { status: finalization.bookingStatus } : {}),
+            updated_at: now,
+          },
+        });
+
+        if (finalization.finalStatus === "PRESENT" || finalization.finalStatus === "ABSENT") {
+          await this.updatePackageCompletionForAttendance(tx, booking.purchased_package_id);
+
+          if (finalization.finalStatus === "PRESENT") {
+            void ActivityNotificationService.notifyAttendancePresent(bookingId).catch((error) => {
+              console.error('Failed to send attendance present notification:', error);
+            });
+          } else {
+            void ActivityNotificationService.notifyAttendanceAbsent(bookingId).catch((error) => {
+              console.error('Failed to send attendance absent notification:', error);
+            });
+          }
+        }
+      }
+
+      return tx.bookings.findUnique({
+        where: { id: finalizedBooking.id },
         include: {
           students: {
             select: { id: true, name: true },
@@ -1037,124 +1272,35 @@ export class BookingService {
           },
         },
       });
-
-      if (booking.purchased_package_id) {
-        const purchasedPackage = await tx.purchased_packages.findUnique({
-          where: { id: booking.purchased_package_id },
-          select: {
-            id: true,
-            classes_completed: true,
-            classes_total: true,
-          },
-        });
-
-        if (purchasedPackage && purchasedPackage.classes_completed < purchasedPackage.classes_total) {
-          await tx.purchased_packages.update({
-            where: { id: purchasedPackage.id },
-            data: {
-              classes_completed: { increment: 1 },
-            },
-          });
-
-          // Check if all sessions are now completed
-          const newCompleted = purchasedPackage.classes_completed + 1;
-          if (newCompleted >= purchasedPackage.classes_total) {
-            void ActivityNotificationService.notifyAllSessionsCompleted(purchasedPackage.id).catch((error) => {
-              console.error('Failed to send all-sessions-completed notification:', error);
-            });
-          }
-        }
-      }
-
-      // Send attendance present email
-      void ActivityNotificationService.notifyAttendancePresent(bookingId).catch((error) => {
-        console.error('Failed to send attendance present notification:', error);
-      });
-
-      return updatedBooking;
     });
   }
 
   /**
-   * Teacher marks a class as absent (attendance)
+   * Teacher marks attendance as present.
+   */
+  async markBookingCompleted(bookingId: string, teacherId: string) {
+    return this.markAttendance(bookingId, teacherId, "teacher", "PRESENT");
+  }
+
+  /**
+   * Teacher marks attendance as absent.
    */
   async markBookingAbsent(bookingId: string, teacherId: string) {
-    const booking = await prisma.bookings.findUnique({
-      where: { id: bookingId },
-    });
+    return this.markAttendance(bookingId, teacherId, "teacher", "ABSENT");
+  }
 
-    if (!booking) {
-      throw new Error("Booking not found");
-    }
+  /**
+   * Student marks attendance as present.
+   */
+  async markBookingCompletedByStudent(bookingId: string, studentId: string) {
+    return this.markAttendance(bookingId, studentId, "student", "PRESENT");
+  }
 
-    if (booking.teacher_id !== teacherId) {
-      throw new Error("Unauthorized");
-    }
-
-    if ((booking.status as string) === "ABSENT") {
-      throw new Error("Booking is already marked as absent");
-    }
-
-    if (booking.status !== "SCHEDULED") {
-      throw new Error("Only scheduled classes can be marked as absent");
-    }
-
-    if (new Date(booking.scheduled_at) > new Date()) {
-      throw new Error("You can only mark attendance for classes that have already started");
-    }
-
-    return prisma.$transaction(async (tx) => {
-      const updatedBooking = await tx.bookings.update({
-        where: { id: bookingId },
-        data: {
-          status: "ABSENT" as any,
-          updated_at: new Date(),
-        },
-        include: {
-          students: {
-            select: { id: true, name: true },
-          },
-          teachers: {
-            select: { id: true, name: true },
-          },
-        },
-      });
-
-      if (booking.purchased_package_id) {
-        const purchasedPackage = await tx.purchased_packages.findUnique({
-          where: { id: booking.purchased_package_id },
-          select: {
-            id: true,
-            classes_completed: true,
-            classes_total: true,
-          },
-        });
-
-        if (purchasedPackage && purchasedPackage.classes_completed < purchasedPackage.classes_total) {
-          await tx.purchased_packages.update({
-            where: { id: purchasedPackage.id },
-            data: {
-              classes_completed: { increment: 1 },
-            },
-          });
-
-          // Check if all sessions are now completed
-          const newCompleted = purchasedPackage.classes_completed + 1;
-          if (newCompleted >= purchasedPackage.classes_total) {
-            void ActivityNotificationService.notifyAllSessionsCompleted(purchasedPackage.id).catch((error) => {
-              console.error('Failed to send all-sessions-completed notification:', error);
-            });
-          }
-        }
-      }
-
-      // Send attendance absent email
-      void ActivityNotificationService.notifyAttendanceAbsent(bookingId).catch((error) => {
-        console.error('Failed to send attendance absent notification:', error);
-      });
-
-      return updatedBooking;
-    });
+  /**
+   * Student marks attendance as absent.
+   */
+  async markBookingAbsentByStudent(bookingId: string, studentId: string) {
+    return this.markAttendance(bookingId, studentId, "student", "ABSENT");
   }
 
   /**
@@ -1306,6 +1452,17 @@ export class BookingService {
         }
       : { completed: 0, total: 0 };
 
+    const normalizedLevel = String(teacherPackage?.level || "").trim().toLowerCase();
+    const resolvedLevel =
+      normalizedLevel === "beginner"
+        ? "Beginner"
+        : normalizedLevel === "advanced"
+        ? "Advanced"
+        : "Intermediate";
+
+    const resolvedInstrument = teacherPackage?.instrument || "Music";
+    const resolvedMode = teacherPackage?.mode === "offline" ? "offline" : "online";
+
     // Format class history
     const classHistory = bookings.map(booking => {
       // Use rescheduled_at if the booking has been rescheduled, otherwise use scheduled_at
@@ -1352,8 +1509,8 @@ export class BookingService {
         ? Math.floor((new Date().getTime() - new Date(student.date_of_birth).getTime()) / (365.25 * 24 * 60 * 60 * 1000))
         : 0,
       avatar: student.profile_picture_url,
-      instrument: "Music", // Would need student instrument preferences
-      level: "Intermediate" as const,
+      instrument: resolvedInstrument,
+      level: resolvedLevel,
       progress: Math.min(100, Math.round((completedBookings.length / Math.max(1, totalBookings)) * 100)),
       learningGoals: [], // Would need separate goals table
       preferredSchedule: "", // Would need to store preferences
@@ -1399,7 +1556,7 @@ export class BookingService {
                 hour12: true,
               })}`;
             })(),
-            mode: "online" as const,
+            mode: resolvedMode,
             meetingLink: nextBooking.meeting_link,
           }
         : undefined,

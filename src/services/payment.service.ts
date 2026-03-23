@@ -372,33 +372,33 @@ export class PaymentService {
     }
 
     // Calculate pricing using the formula (server-side validation)
-    // Look up the teacher's base price for the selected instrument + level
-    const teacherInstrument = await prisma.teacher_instruments.findFirst({
+    // Look up the exact tier for teacher + instrument + level + mode.
+    const matchingTier = await prisma.teacher_instrument_tiers.findFirst({
       where: {
-        teacher_id,
-        instrument: normalizedInstrument,
-        teach_or_perform: { in: ['teach', 'Teach'] },
+        level: normalizedLevel as any,
+        mode: normalizedMode as any,
+        teacher_instruments: {
+          teacher_id,
+          instrument: {
+            equals: normalizedInstrument,
+            mode: 'insensitive',
+          },
+          teach_or_perform: { in: ['teach', 'Teach'] },
+        },
       },
-      include: {
-        teacher_instrument_tiers: true,
+      select: {
+        price_inr: true,
       },
     }) as any;
 
     let totalPackagePrice: number;
     let pricePerSession: number;
 
-    const matchingTier = teacherInstrument?.teacher_instrument_tiers?.find((tier: any) => {
-      const tierLevel = String(tier.level || '').trim().toLowerCase();
-      const tierMode = String(tier.mode || '').trim().toLowerCase();
-      return tierLevel === normalizedLevel && tierMode === normalizedMode;
-    });
-
     if (matchingTier) {
-      const tier = matchingTier;
-      const teacherBasePrice = tier.price_inr != null
-        ? (typeof tier.price_inr === 'object' && typeof tier.price_inr.toNumber === 'function'
-          ? tier.price_inr.toNumber()
-          : Number(tier.price_inr))
+      const teacherBasePrice = matchingTier.price_inr != null
+        ? (typeof matchingTier.price_inr === 'object' && typeof matchingTier.price_inr.toNumber === 'function'
+          ? matchingTier.price_inr.toNumber()
+          : Number(matchingTier.price_inr))
         : null;
 
       if (teacherBasePrice && teacherBasePrice > 0) {

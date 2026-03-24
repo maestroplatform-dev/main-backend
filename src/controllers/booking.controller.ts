@@ -487,6 +487,34 @@ export class BookingController {
   }
 
   /**
+   * POST /api/bookings/:id/report-attendance-dispute
+   * Teacher or student reports attendance mismatch/fraud to admin
+   */
+  async reportAttendanceDispute(req: AuthRequest, res: Response) {
+    try {
+      const id = req.params.id as string;
+      const userId = req.user?.id;
+      const reason = String(req.body?.reason || "");
+
+      if (!userId) {
+        res.status(401).json({ error: "Unauthorized" });
+        return;
+      }
+
+      const result = await bookingService.reportAttendanceDispute(id, userId, reason);
+
+      res.status(201).json({
+        success: true,
+        message: "Attendance dispute reported to admin",
+        data: result,
+      });
+    } catch (error: any) {
+      console.error("Error reporting attendance dispute:", error);
+      res.status(400).json({ error: error.message || "Failed to report attendance dispute" });
+    }
+  }
+
+  /**
    * PATCH /api/bookings/:id/cancel
    * Cancel a booking (by either party)
    */

@@ -130,6 +130,25 @@ router.post(
   asyncHandler(TeacherController.createInstrument)
 )
 
+router.post(
+  '/instruments/generate-pointers',
+  authenticateUser,
+  requireRole('teacher'),
+  asyncHandler(TeacherController.generateInstrumentPointers)
+)
+
+router.get(
+  '/instruments/pointer-status/:requestId',
+  authenticateUser,
+  requireRole('teacher'),
+  asyncHandler(TeacherController.getInstrumentPointerStatus)
+)
+
+router.post(
+  '/instruments/pointer-callback',
+  asyncHandler(TeacherController.handleInstrumentPointerCallback)
+)
+
 router.put(
   '/instruments/:id',
   authenticateUser,

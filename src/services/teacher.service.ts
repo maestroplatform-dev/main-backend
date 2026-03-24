@@ -3,8 +3,225 @@ import { AppError } from '../types'
 import { TeacherOnboardingInput, TeacherProfileUpdateInput } from '../utils/validation'
 import { SectionReviewService } from './section-review.service'
 import { computeStartingPrice, buildPricingConfig } from '../utils/pricing'
+import { randomUUID } from 'crypto'
+
+type PointerLevel = 'beginner' | 'intermediate' | 'advanced'
+type PointerSession = '10' | '20' | '30'
+
+type PackageCardPoints = Record<PointerLevel, Record<PointerSession, string[]>>
+
+type PointerGenerationJob = {
+  requestId: string
+  teacherId: string
+  status: 'pending' | 'ready' | 'error'
+  package_card_points: PackageCardPoints | null
+  error: string | null
+  createdAt: number
+}
 
 export class TeacherService {
+  private static pointerGenerationJobs = new Map<string, PointerGenerationJob>()
+  private static POINTER_JOB_TTL_MS = 60 * 60 * 1000
+
+  private static cleanupExpiredPointerJobs() {
+    const now = Date.now()
+    for (const [key, job] of this.pointerGenerationJobs.entries()) {
+      if (now - job.createdAt > this.POINTER_JOB_TTL_MS) {
+        this.pointerGenerationJobs.delete(key)
+      }
+    }
+  }
+
+  private static buildPointerCallbackUrl(): string | null {
+    if (process.env.N8N_POINTERS_CALLBACK_URL) return process.env.N8N_POINTERS_CALLBACK_URL
+    if (process.env.API_BASE_URL) {
+      return `${process.env.API_BASE_URL.replace(/\/$/, '')}/api/v1/teachers/instruments/pointer-callback`
+    }
+    return null
+  }
+
+  private static defaultPackageCardPoints(): PackageCardPoints {
+    return {
+      beginner: { '10': ['', '', '', ''], '20': ['', '', '', ''], '30': ['', '', '', ''] },
+      intermediate: { '10': ['', '', '', ''], '20': ['', '', '', ''], '30': ['', '', '', ''] },
+      advanced: { '10': ['', '', '', ''], '20': ['', '', '', ''], '30': ['', '', '', ''] },
+    }
+  }
+
+  private static normalizePackageCardPoints(raw: any): PackageCardPoints {
+    const out = this.defaultPackageCardPoints()
+    if (!raw || typeof raw !== 'object') return out
+
+    const levels: PointerLevel[] = ['beginner', 'intermediate', 'advanced']
+    const sessions: PointerSession[] = ['10', '20', '30']
+
+    for (const level of levels) {
+      const levelRaw = raw[level]
+      if (!levelRaw || typeof levelRaw !== 'object') continue
+
+      for (const session of sessions) {
+        const sessionRaw = levelRaw[session]
+        if (!Array.isArray(sessionRaw)) continue
+
+        const clean = sessionRaw
+          .slice(0, 4)
+          .map((value: unknown) => (typeof value === 'string' ? value : String(value ?? '')))
+
+        while (clean.length < 4) clean.push('')
+        out[level][session] = clean
+      }
+    }
+
+    return out
+  }
+
+  static async queueInstrumentPointerGeneration(
+    teacherId: string,
+    data: {
+      instrument_name: string
+      teach_or_perform: 'teach' | 'perform'
+      class_mode?: 'online' | 'offline' | null
+      pricing: {
+        beginner: number
+        intermediate: number
+        advanced: number
+      }
+    }
+  ) {
+    this.cleanupExpiredPointerJobs()
+
+    const teacher = await this.getProfile(teacherId)
+    const requestId = randomUUID()
+    const callbackUrl = this.buildPointerCallbackUrl()
+    const webhookUrl = process.env.N8N_POINTERS_WEBHOOK_URL
+
+    const job: PointerGenerationJob = {
+      requestId,
+      teacherId,
+      status: 'pending',
+      package_card_points: null,
+      error: null,
+      createdAt: Date.now(),
+    }
+    this.pointerGenerationJobs.set(requestId, job)
+
+    if (!webhookUrl) {
+      job.status = 'error'
+      job.error = 'N8N_POINTERS_WEBHOOK_URL not configured'
+      return { queued: false, requestId, reason: job.error }
+    }
+
+    if (!callbackUrl) {
+      job.status = 'error'
+      job.error = 'Pointer callback URL is not configured'
+      return { queued: false, requestId, reason: job.error }
+    }
+
+    const payload = {
+      request_id: requestId,
+      teacher_id: teacherId,
+      instrument_data: data,
+      teacher_profile: {
+        name: teacher.name,
+        bio: teacher.bio,
+        tagline: teacher.tagline,
+        teaching_style: teacher.teaching_style,
+        education: teacher.education,
+        professional_experience: teacher.professional_experience,
+        current_city: teacher.current_city,
+        music_experience_years: teacher.music_experience_years,
+        teaching_experience_years: teacher.teaching_experience_years,
+        performance_experience_years: teacher.performance_experience_years,
+        languages: (teacher.teacher_languages || []).map((l: any) => l.language),
+      },
+      callbackUrl,
+    }
+
+    try {
+      const response = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(process.env.N8N_CALLBACK_SECRET ? { Authorization: `Bearer ${process.env.N8N_CALLBACK_SECRET}` } : {}),
+        },
+        body: JSON.stringify(payload),
+      })
+
+      if (!response.ok) {
+        const body = await response.text()
+        job.status = 'error'
+        job.error = `n8n rejected request (${response.status}): ${body}`
+        return { queued: false, requestId, reason: job.error }
+      }
+    } catch (error: any) {
+      job.status = 'error'
+      job.error = error?.message || 'Failed to call n8n'
+      return { queued: false, requestId, reason: job.error }
+    }
+
+    return { queued: true, requestId }
+  }
+
+  static getInstrumentPointerGenerationStatus(teacherId: string, requestId: string) {
+    this.cleanupExpiredPointerJobs()
+
+    const job = this.pointerGenerationJobs.get(requestId)
+    if (!job || job.teacherId !== teacherId) {
+      throw new AppError(404, 'Pointer generation request not found', 'POINTER_REQUEST_NOT_FOUND')
+    }
+
+    if (job.status === 'ready') {
+      return {
+        request_id: requestId,
+        status: 'ready',
+        package_card_points: job.package_card_points,
+      }
+    }
+
+    if (job.status === 'error') {
+      return {
+        request_id: requestId,
+        status: 'error',
+        error: job.error,
+      }
+    }
+
+    return {
+      request_id: requestId,
+      status: 'pending',
+    }
+  }
+
+  static async applyInstrumentPointerCallback(data: {
+    request_id: string
+    teacher_id?: string
+    package_card_points?: unknown
+    error?: string
+  }) {
+    this.cleanupExpiredPointerJobs()
+
+    const job = this.pointerGenerationJobs.get(data.request_id)
+    if (!job) {
+      return { updated: false, reason: 'request not found or expired' }
+    }
+
+    if (data.teacher_id && data.teacher_id !== job.teacherId) {
+      return { updated: false, reason: 'teacher mismatch' }
+    }
+
+    if (data.error) {
+      job.status = 'error'
+      job.error = data.error
+      return { updated: true, status: 'error' }
+    }
+
+    job.package_card_points = this.normalizePackageCardPoints(data.package_card_points)
+    job.status = 'ready'
+    job.error = null
+
+    return { updated: true, status: 'ready' }
+  }
+
   // Complete teacher onboarding
   static async onboard(teacherId: string, data: TeacherOnboardingInput) {
     // Check if teacher exists
@@ -680,6 +897,7 @@ export class TeacherService {
     performance_fee_inr?: number
     open_to_international?: boolean
     international_premium?: number
+    package_card_points?: any
     tiers?: Array<{
       level: string
       mode: string
@@ -706,6 +924,7 @@ export class TeacherService {
         class_mode: data.class_mode as any,
         base_price: data.base_price,
         performance_fee_inr: data.performance_fee_inr,
+        package_card_points: data.package_card_points ?? null,
       },
     })
 
@@ -749,6 +968,7 @@ export class TeacherService {
     performance_fee_inr?: number
     open_to_international?: boolean
     international_premium?: number
+    package_card_points?: any
     tiers?: Array<{
       level: string
       mode: string
@@ -772,6 +992,7 @@ export class TeacherService {
     if (data.class_mode !== undefined) updateData.class_mode = data.class_mode
     if (data.base_price !== undefined) updateData.base_price = data.base_price
     if (data.performance_fee_inr !== undefined) updateData.performance_fee_inr = data.performance_fee_inr
+    if (data.package_card_points !== undefined) updateData.package_card_points = data.package_card_points
 
     await prisma.teacher_instruments.update({
       where: { id: instrumentId },

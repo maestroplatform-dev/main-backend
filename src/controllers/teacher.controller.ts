@@ -2,6 +2,28 @@ import { Request, Response } from 'express'
 import { AuthRequest } from '../types'
 import { TeacherService } from '../services/teacher.service'
 import { teacherOnboardingSchema, teacherProfileUpdateSchema } from '../utils/validation'
+import { AppError } from '../types'
+import { z } from 'zod'
+
+const generatePointersSchema = z.object({
+  instrument_name: z.string().trim().min(1),
+  teach_or_perform: z.enum(['teach', 'perform']).default('teach'),
+  class_mode: z.enum(['online', 'offline']).optional(),
+  pricing: z.object({
+    beginner: z.number().nonnegative(),
+    intermediate: z.number().nonnegative(),
+    advanced: z.number().nonnegative(),
+  }),
+})
+
+const pointerCallbackSchema = z.object({
+  request_id: z.string().trim().min(1),
+  teacher_id: z.string().uuid().optional(),
+  package_card_points: z.unknown().optional(),
+  error: z.string().optional(),
+}).refine((data) => Boolean(data.error) || data.package_card_points !== undefined, {
+  message: 'Either package_card_points or error is required',
+})
 
 export class TeacherController {
   // POST /api/v1/teachers/onboard
@@ -152,7 +174,7 @@ export class TeacherController {
 
   // POST /api/v1/teachers/instruments
   static async createInstrument(req: AuthRequest, res: Response) {
-    const { instrument, teach_or_perform, class_mode, base_price, performance_fee_inr, open_to_international, international_premium, tiers } = req.body
+    const { instrument, teach_or_perform, class_mode, base_price, performance_fee_inr, open_to_international, international_premium, tiers, package_card_points } = req.body
 
     if (!instrument || !teach_or_perform) {
       res.status(400).json({
@@ -171,6 +193,7 @@ export class TeacherController {
       open_to_international,
       international_premium,
       tiers,
+      package_card_points,
     })
 
     res.status(201).json({
@@ -183,7 +206,7 @@ export class TeacherController {
   // PUT /api/v1/teachers/instruments/:id
   static async updateInstrument(req: AuthRequest, res: Response) {
     const id = req.params.id as string
-    const { instrument, teach_or_perform, class_mode, base_price, performance_fee_inr, open_to_international, international_premium, tiers } = req.body
+    const { instrument, teach_or_perform, class_mode, base_price, performance_fee_inr, open_to_international, international_premium, tiers, package_card_points } = req.body
 
     const result = await TeacherService.updateInstrument(req.user!.id, id, {
       instrument,
@@ -194,6 +217,7 @@ export class TeacherController {
       open_to_international,
       international_premium,
       tiers,
+      package_card_points,
     })
 
     res.json({
@@ -212,6 +236,63 @@ export class TeacherController {
     res.json({
       success: true,
       message: 'Instrument deleted successfully',
+    })
+  }
+
+  // POST /api/v1/teachers/instruments/generate-pointers
+  static async generateInstrumentPointers(req: AuthRequest, res: Response) {
+    const data = generatePointersSchema.parse(req.body)
+
+    const result = await TeacherService.queueInstrumentPointerGeneration(req.user!.id, {
+      instrument_name: data.instrument_name,
+      teach_or_perform: data.teach_or_perform,
+      class_mode: data.class_mode,
+      pricing: data.pricing,
+    })
+
+    res.status(202).json({
+      success: true,
+      data: result,
+    })
+  }
+
+  // GET /api/v1/teachers/instruments/pointer-status/:requestId
+  static async getInstrumentPointerStatus(req: AuthRequest, res: Response) {
+    const requestId = String(req.params.requestId || '').trim()
+    if (!requestId) {
+      throw new AppError(400, 'requestId is required', 'REQUEST_ID_REQUIRED')
+    }
+
+    const result = TeacherService.getInstrumentPointerGenerationStatus(req.user!.id, requestId)
+
+    res.json({
+      success: true,
+      data: result,
+    })
+  }
+
+  // POST /api/v1/teachers/instruments/pointer-callback
+  static async handleInstrumentPointerCallback(req: Request, res: Response) {
+    const expectedSecret = process.env.N8N_CALLBACK_SECRET
+    if (expectedSecret) {
+      const authHeader = String(req.headers.authorization || '')
+      const bearerToken = authHeader.toLowerCase().startsWith('bearer ')
+        ? authHeader.slice(7).trim()
+        : ''
+      const headerToken = String(req.headers['x-n8n-secret'] || '').trim()
+      const provided = bearerToken || headerToken
+
+      if (!provided || provided !== expectedSecret) {
+        throw new AppError(401, 'Unauthorized callback', 'UNAUTHORIZED_CALLBACK')
+      }
+    }
+
+    const data = pointerCallbackSchema.parse(req.body)
+    const result = await TeacherService.applyInstrumentPointerCallback(data)
+
+    res.status(200).json({
+      success: true,
+      data: result,
     })
   }
 

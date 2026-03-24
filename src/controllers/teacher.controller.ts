@@ -16,11 +16,32 @@ const generatePointersSchema = z.object({
   }),
 })
 
+const normalizePointerCallbackBody = (rawBody: unknown) => {
+  const top = Array.isArray(rawBody) ? rawBody[0] : rawBody
+  const topRecord = top && typeof top === 'object' ? (top as Record<string, unknown>) : {}
+  const output = topRecord.output && typeof topRecord.output === 'object'
+    ? (topRecord.output as Record<string, unknown>)
+    : {}
+
+  return {
+    request_id: topRecord.request_id ?? topRecord.requestId ?? output.request_id ?? output.requestId,
+    teacher_id: topRecord.teacher_id ?? topRecord.teacherId ?? output.teacher_id ?? output.teacherId,
+    package_card_points:
+      topRecord.package_card_points
+      ?? topRecord.packageCardPoints
+      ?? output.package_card_points
+      ?? output.packageCardPoints,
+    error: topRecord.error ?? output.error,
+  }
+}
+
 const pointerCallbackSchema = z.object({
-  request_id: z.string().trim().min(1),
+  request_id: z.string().trim().min(1).optional(),
   teacher_id: z.string().uuid().optional(),
   package_card_points: z.unknown().optional(),
   error: z.string().optional(),
+}).refine((data) => Boolean(data.request_id), {
+  message: 'request_id is required (send it at top-level or inside output)',
 }).refine((data) => Boolean(data.error) || data.package_card_points !== undefined, {
   message: 'Either package_card_points or error is required',
 })
@@ -287,8 +308,14 @@ export class TeacherController {
       }
     }
 
-    const data = pointerCallbackSchema.parse(req.body)
-    const result = await TeacherService.applyInstrumentPointerCallback(data)
+    const normalizedBody = normalizePointerCallbackBody(req.body)
+    const data = pointerCallbackSchema.parse(normalizedBody)
+    const result = await TeacherService.applyInstrumentPointerCallback({
+      request_id: data.request_id as string,
+      teacher_id: data.teacher_id,
+      package_card_points: data.package_card_points,
+      error: data.error,
+    })
 
     res.status(200).json({
       success: true,

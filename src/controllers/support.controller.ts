@@ -1,6 +1,25 @@
 import { Response } from 'express'
 import prisma from '../config/database'
 import { AuthRequest, AppError } from '../types'
+import { bookingService } from '../services/booking.service'
+
+function parseAttendanceDisputeFromMessage(message: string) {
+  const bookingIdMatch = message.match(/^Booking ID:\s*(.+)$/im)
+  const reporterMatch = message.match(/^Reporter:\s*(.+)$/im)
+  const teacherMarkMatch = message.match(/^Teacher Mark:\s*(.+)$/im)
+  const studentMarkMatch = message.match(/^Student Mark:\s*(.+)$/im)
+  const finalStatusMatch = message.match(/^Final Attendance Status:\s*(.+)$/im)
+
+  if (!bookingIdMatch) return null
+
+  return {
+    booking_id: bookingIdMatch[1].trim(),
+    reporter: reporterMatch?.[1]?.trim() || null,
+    teacher_mark: teacherMarkMatch?.[1]?.trim() || null,
+    student_mark: studentMarkMatch?.[1]?.trim() || null,
+    final_status: finalStatusMatch?.[1]?.trim() || null,
+  }
+}
 
 export class SupportController {
   /**
@@ -90,22 +109,27 @@ export class SupportController {
     ])
 
     // Flatten the response for cleaner data
-    const formattedTickets = tickets.map((ticket) => ({
-      id: ticket.id,
-      subject: ticket.subject,
-      message: ticket.message,
-      status: ticket.status,
-      admin_notes: ticket.admin_notes,
-      created_at: ticket.created_at,
-      updated_at: ticket.updated_at,
-      student: {
-        id: ticket.students.id,
-        name: ticket.students.name,
-        email: ticket.students.profiles?.users?.email || null,
-        guardian_name: ticket.students.guardian_name,
-        guardian_phone: ticket.students.guardian_phone,
-      },
-    }))
+    const formattedTickets = tickets.map((ticket) => {
+      const attendanceDispute = parseAttendanceDisputeFromMessage(ticket.message)
+
+      return {
+        id: ticket.id,
+        subject: ticket.subject,
+        message: ticket.message,
+        status: ticket.status,
+        admin_notes: ticket.admin_notes,
+        created_at: ticket.created_at,
+        updated_at: ticket.updated_at,
+        attendance_dispute: attendanceDispute,
+        student: {
+          id: ticket.students.id,
+          name: ticket.students.name,
+          email: ticket.students.profiles?.users?.email || null,
+          guardian_name: ticket.students.guardian_name,
+          guardian_phone: ticket.students.guardian_phone,
+        },
+      }
+    })
 
     res.json({
       success: true,
@@ -153,6 +177,56 @@ export class SupportController {
     res.json({
       success: true,
       data: { ticket },
+    })
+  }
+
+  /**
+   * Admin: Resolve attendance dispute linked to a support ticket
+   */
+  static async resolveAttendanceDispute(req: AuthRequest, res: Response) {
+    const id = req.params.id as string
+    const decisionRaw = String(req.body?.decision || '').toUpperCase()
+    const adminNotes = req.body?.admin_notes
+
+    if (!['PRESENT', 'ABSENT'].includes(decisionRaw)) {
+      throw new AppError(400, 'decision must be PRESENT or ABSENT', 'VALIDATION_ERROR')
+    }
+
+    const ticket = await prisma.support_tickets.findUnique({ where: { id } })
+    if (!ticket) {
+      throw new AppError(404, 'Support ticket not found', 'NOT_FOUND')
+    }
+
+    const dispute = parseAttendanceDisputeFromMessage(ticket.message)
+    if (!dispute?.booking_id) {
+      throw new AppError(400, 'This ticket is not an attendance dispute', 'VALIDATION_ERROR')
+    }
+
+    const booking = await bookingService.adminResolveAttendanceDispute(
+      dispute.booking_id,
+      decisionRaw as 'PRESENT' | 'ABSENT'
+    )
+
+    const decisionNote = `Attendance dispute resolved by admin. Final decision: ${decisionRaw}.`
+    const mergedNotes = adminNotes !== undefined
+      ? String(adminNotes)
+      : [ticket.admin_notes, decisionNote].filter(Boolean).join('\n')
+
+    const updatedTicket = await prisma.support_tickets.update({
+      where: { id },
+      data: {
+        status: 'resolved',
+        admin_notes: mergedNotes,
+        updated_at: new Date(),
+      },
+    })
+
+    res.json({
+      success: true,
+      data: {
+        ticket: updatedTicket,
+        booking,
+      },
     })
   }
 }

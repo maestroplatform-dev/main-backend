@@ -307,6 +307,9 @@ export class PaymentController {
           is_demo: b.is_demo,
           duration_minutes: b.duration_minutes,
           notes: b.notes,
+          teacher_attendance: b.teacher_attendance,
+          student_attendance: b.student_attendance,
+          attendance_final_status: b.attendance_final_status,
         })),
         payments: (pkg.purchase_payments || []).map((payment, idx) => ({
           id: payment.id,
@@ -404,6 +407,9 @@ export class PaymentController {
           is_demo: b.is_demo,
           duration_minutes: b.duration_minutes,
           notes: b.notes,
+          teacher_attendance: b.teacher_attendance,
+          student_attendance: b.student_attendance,
+          attendance_final_status: b.attendance_final_status,
         })),
         payments: (pkg.purchase_payments || []).map((payment, idx) => ({
           id: payment.id,

@@ -40,4 +40,12 @@ router.patch(
   asyncHandler(SupportController.updateTicket)
 )
 
+router.patch(
+  '/tickets/:id/resolve-attendance-dispute',
+  apiLimiter,
+  authenticateUser,
+  requireRole('admin'),
+  asyncHandler(SupportController.resolveAttendanceDispute)
+)
+
 export default router

@@ -1304,6 +1304,139 @@ export class BookingService {
   }
 
   /**
+   * Report an attendance dispute to admin (teacher or student).
+   */
+  async reportAttendanceDispute(bookingId: string, userId: string, reason: string) {
+    const trimmedReason = reason?.trim();
+    if (!trimmedReason) {
+      throw new Error("Reason is required to report attendance dispute");
+    }
+
+    const booking = await prisma.bookings.findUnique({
+      where: { id: bookingId },
+      include: {
+        students: {
+          select: { id: true, name: true },
+        },
+        teachers: {
+          select: { id: true, name: true },
+        },
+      },
+    });
+
+    if (!booking) {
+      throw new Error("Booking not found");
+    }
+
+    const isTeacher = booking.teacher_id === userId;
+    const isStudent = booking.student_id === userId;
+
+    if (!isTeacher && !isStudent) {
+      throw new Error("Unauthorized");
+    }
+
+    if (isTeacher && booking.student_attendance === "PENDING") {
+      throw new Error("You can report an attendance issue only after the student marks attendance");
+    }
+
+    if (isStudent && booking.teacher_attendance === "PENDING") {
+      throw new Error("You can report an attendance issue only after the teacher marks attendance");
+    }
+
+    const reporterRole = isTeacher ? "Teacher" : "Student";
+    const subject = `Attendance dispute: ${booking.id}`;
+    const message = [
+      `Reporter: ${reporterRole}`,
+      `Booking ID: ${booking.id}`,
+      `Student: ${booking.students?.name || booking.student_id}`,
+      `Teacher: ${booking.teachers?.name || booking.teacher_id}`,
+      `Scheduled At: ${booking.scheduled_at.toISOString()}`,
+      `Teacher Mark: ${booking.teacher_attendance}`,
+      `Student Mark: ${booking.student_attendance}`,
+      `Final Attendance Status: ${booking.attendance_final_status}`,
+      "",
+      "Reason:",
+      trimmedReason,
+    ].join("\n");
+
+    const ticket = await prisma.support_tickets.create({
+      data: {
+        student_id: booking.student_id,
+        subject,
+        message,
+      },
+    });
+
+    return {
+      booking_id: booking.id,
+      ticket_id: ticket.id,
+    };
+  }
+
+  /**
+   * Admin resolves an attendance dispute with final decision.
+   */
+  async adminResolveAttendanceDispute(
+    bookingId: string,
+    decision: "PRESENT" | "ABSENT"
+  ) {
+    const booking = await prisma.bookings.findUnique({
+      where: { id: bookingId },
+    });
+
+    if (!booking) {
+      throw new Error("Booking not found");
+    }
+
+    if (booking.status === "CANCELLED") {
+      throw new Error("Cannot resolve attendance for cancelled booking");
+    }
+
+    if (!["PENDING", "DISPUTED"].includes(booking.attendance_final_status)) {
+      throw new Error("Attendance has already been finalized");
+    }
+
+    return prisma.$transaction(async (tx) => {
+      const now = new Date();
+      const finalizedBooking = await tx.bookings.update({
+        where: { id: bookingId },
+        data: {
+          teacher_attendance: decision,
+          student_attendance: decision,
+          teacher_attendance_marked_at: now,
+          student_attendance_marked_at: now,
+          attendance_final_status: decision,
+          attendance_finalized_at: now,
+          status: decision === "PRESENT" ? booking_status.COMPLETED : booking_status.ABSENT,
+          updated_at: now,
+        },
+        include: {
+          students: {
+            select: { id: true, name: true },
+          },
+          teachers: {
+            select: { id: true, name: true },
+          },
+        },
+      });
+
+      await this.updatePackageCompletionForAttendance(tx, booking.purchased_package_id);
+
+      if (decision === "PRESENT") {
+        void ActivityNotificationService.notifyAttendancePresent(bookingId).catch((error) => {
+          console.error("Failed to send attendance present notification:", error);
+        });
+      } else {
+        void ActivityNotificationService.notifyAttendanceAbsent(bookingId).catch((error) => {
+          console.error("Failed to send attendance absent notification:", error);
+        });
+      }
+
+      return finalizedBooking;
+    });
+  }
+
+  /**
    * Cancel a booking (by either party)
    */
   async cancelBooking(bookingId: string, userId: string) {
@@ -1498,6 +1631,9 @@ export class BookingService {
         rescheduled_by: booking.rescheduled_by || null,
         notes: booking.notes || undefined,
         meetingLink: booking.meeting_link || undefined,
+        teacher_attendance: booking.teacher_attendance,
+        student_attendance: booking.student_attendance,
+        attendance_final_status: booking.attendance_final_status,
       };
     });
 

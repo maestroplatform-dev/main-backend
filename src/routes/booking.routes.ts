@@ -26,6 +26,7 @@ router.patch("/:id/complete", bookingController.markBookingCompleted.bind(bookin
 router.patch("/:id/absent", bookingController.markBookingAbsent.bind(bookingController));
 router.patch("/:id/student-complete", bookingController.markBookingCompletedByStudent.bind(bookingController));
 router.patch("/:id/student-absent", bookingController.markBookingAbsentByStudent.bind(bookingController));
+router.post("/:id/report-attendance-dispute", bookingController.reportAttendanceDispute.bind(bookingController));
 
 // Shared routes
 router.get("/:id", bookingController.getBookingById.bind(bookingController));

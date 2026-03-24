@@ -21,7 +21,7 @@ type PointerGenerationJob = {
 
 export class TeacherService {
   private static pointerGenerationJobs = new Map<string, PointerGenerationJob>()
-  private static POINTER_JOB_TTL_MS = 60 * 60 * 1000
+  private static POINTER_JOB_TTL_MS = 24 * 60 * 60 * 1000
 
   private static cleanupExpiredPointerJobs() {
     const now = Date.now()
@@ -202,7 +202,31 @@ export class TeacherService {
 
     const job = this.pointerGenerationJobs.get(data.request_id)
     if (!job) {
-      return { updated: false, reason: 'request not found or expired' }
+      if (!data.teacher_id) {
+        return {
+          updated: false,
+          reason: 'request not found or expired, and teacher_id missing for recovery',
+          request_id: data.request_id,
+        }
+      }
+
+      const recoveredJob: PointerGenerationJob = {
+        requestId: data.request_id,
+        teacherId: data.teacher_id,
+        status: data.error ? 'error' : 'ready',
+        package_card_points: data.error ? null : this.normalizePackageCardPoints(data.package_card_points),
+        error: data.error || null,
+        createdAt: Date.now(),
+      }
+
+      this.pointerGenerationJobs.set(data.request_id, recoveredJob)
+
+      return {
+        updated: true,
+        recovered: true,
+        status: recoveredJob.status,
+        reason: 'request was missing in memory and has been recovered from callback payload',
+      }
     }
 
     if (data.teacher_id && data.teacher_id !== job.teacherId) {

@@ -23,6 +23,15 @@ interface GoogleProfileData {
   guardianPhone?: string
 }
 
+interface StudentProfileUpdateData {
+  name?: string
+  gender?: string
+  dateOfBirth?: Date
+  guardianName?: string | null
+  guardianPhone?: string | null
+  profilePictureUrl?: string | null
+}
+
 export class StudentService {
   /**
    * Calculate age from date of birth
@@ -276,6 +285,69 @@ export class StudentService {
 
     logger.info({ userId }, '✅ Profile picture updated')
     return student
+  }
+
+  /**
+   * Update student profile fields
+   */
+  static async updateStudentProfile(userId: string, data: StudentProfileUpdateData) {
+    const existing = await prisma.students.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        date_of_birth: true,
+        guardian_name: true,
+        guardian_phone: true,
+      },
+    })
+
+    if (!existing) {
+      throw new AppError(404, 'Student profile not found', 'STUDENT_NOT_FOUND')
+    }
+
+    const effectiveDob = data.dateOfBirth ?? existing.date_of_birth ?? null
+    const effectiveGuardianName = data.guardianName !== undefined ? data.guardianName : existing.guardian_name
+    const effectiveGuardianPhone = data.guardianPhone !== undefined ? data.guardianPhone : existing.guardian_phone
+
+    if (effectiveDob && this.requiresGuardian(effectiveDob)) {
+      if (!effectiveGuardianName || !effectiveGuardianPhone) {
+        throw new AppError(
+          400,
+          'Guardian information is required for students under 18',
+          'GUARDIAN_REQUIRED'
+        )
+      }
+    }
+
+    const updateData: any = {}
+    if (data.name !== undefined) updateData.name = data.name
+    if (data.gender !== undefined) updateData.gender = data.gender
+    if (data.dateOfBirth !== undefined) updateData.date_of_birth = data.dateOfBirth
+    if (data.guardianName !== undefined) updateData.guardian_name = data.guardianName
+    if (data.guardianPhone !== undefined) updateData.guardian_phone = data.guardianPhone
+    if (data.profilePictureUrl !== undefined) updateData.profile_picture_url = data.profilePictureUrl
+    updateData.updated_at = new Date()
+
+    const updatedStudent = await prisma.$transaction(async (tx) => {
+      const student = await tx.students.update({
+        where: { id: userId },
+        data: updateData,
+      })
+
+      if (data.name !== undefined) {
+        await tx.profiles.update({
+          where: { id: userId },
+          data: {
+            name: data.name,
+          },
+        })
+      }
+
+      return student
+    })
+
+    logger.info({ userId }, '✅ Student profile updated')
+    return updatedStudent
   }
 
   /**

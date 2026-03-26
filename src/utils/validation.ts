@@ -60,6 +60,30 @@ export const studentUpdateProfilePictureSchema = z.object({
   picture_url: z.string().url('Invalid picture URL'),
 })
 
+export const studentUpdateProfileSchema = z
+  .object({
+    name: z.string().min(2, 'Name must be at least 2 characters').max(120).optional(),
+    gender: z.enum(['male', 'female', 'other']).optional(),
+    date_of_birth: z
+      .string()
+      .refine((date) => {
+        const dob = new Date(date)
+        const today = new Date()
+        return dob < today && dob.getFullYear() >= 1900
+      }, 'Invalid date of birth')
+      .optional(),
+    guardian_name: z.string().max(120).nullable().optional(),
+    guardian_phone: z
+      .string()
+      .regex(/^\d{10}$/, 'Guardian phone must be 10 digits')
+      .nullable()
+      .optional(),
+    profile_picture_url: z.string().url('Invalid profile picture URL').nullable().optional(),
+  })
+  .refine((val) => Object.values(val).some((v) => v !== undefined), {
+    message: 'At least one field must be provided',
+  })
+
 // ============================================================
 // PACKAGE CARD (STUDENT DASHBOARD)
 // ============================================================
@@ -91,6 +115,7 @@ export type StudentResendOTPInput = z.infer<typeof studentResendOTPSchema>
 export type StudentCompleteEmailSignupInput = z.infer<typeof studentCompleteEmailSignupSchema>
 export type StudentCompleteGoogleSignupInput = z.infer<typeof studentCompleteGoogleSignupSchema>
 export type StudentUpdateProfilePictureInput = z.infer<typeof studentUpdateProfilePictureSchema>
+export type StudentUpdateProfileInput = z.infer<typeof studentUpdateProfileSchema>
 
 export type StudentLevelInput = z.infer<typeof studentLevelSchema>
 export type AdminUpsertPackageCardTemplateInput = z.infer<typeof adminUpsertPackageCardTemplateSchema>

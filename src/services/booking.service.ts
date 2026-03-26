@@ -1212,6 +1212,10 @@ export class BookingService {
       throw new Error("Student attendance has already been marked");
     }
 
+    if (actor === "student" && booking.teacher_attendance === "PENDING") {
+      throw new Error("Student can mark attendance only after teacher marks attendance");
+    }
+
     return prisma.$transaction(async (tx) => {
       const now = new Date();
       const markedBooking = await tx.bookings.update({
@@ -1359,13 +1363,22 @@ export class BookingService {
       trimmedReason,
     ].join("\n");
 
-    const ticket = await prisma.support_tickets.create({
-      data: {
-        student_id: booking.student_id,
-        subject,
-        message,
-      },
-    });
+    const [, ticket] = await prisma.$transaction([
+      prisma.bookings.update({
+        where: { id: booking.id },
+        data: {
+          attendance_final_status: "DISPUTED",
+          updated_at: new Date(),
+        },
+      }),
+      prisma.support_tickets.create({
+        data: {
+          student_id: booking.student_id,
+          subject,
+          message,
+        },
+      }),
+    ]);
 
     return {
       booking_id: booking.id,

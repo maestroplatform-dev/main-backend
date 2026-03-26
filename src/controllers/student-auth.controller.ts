@@ -11,11 +11,13 @@ import {
   studentCompleteEmailSignupSchema,
   studentCompleteGoogleSignupSchema,
   studentUpdateProfilePictureSchema,
+  studentUpdateProfileSchema,
   type StudentSendOTPInput,
   type StudentVerifyOTPInput,
   type StudentCompleteEmailSignupInput,
   type StudentCompleteGoogleSignupInput,
   type StudentUpdateProfilePictureInput,
+  type StudentUpdateProfileInput,
 } from '../utils/validation'
 
 export class StudentAuthController {
@@ -266,6 +268,51 @@ export class StudentAuthController {
           student: {
             id: student.id,
             profile_picture_url: student.profile_picture_url,
+          },
+        },
+      })
+    } catch (error) {
+      next(error)
+    }
+  }
+
+  /**
+   * PATCH /api/v1/student/profile
+   * Update student profile (requires authentication)
+   */
+  static async updateProfile(req: Request, res: Response, next: NextFunction) {
+    try {
+      const userId = (req as any).user?.id
+
+      if (!userId) {
+        throw new AppError(401, 'User not authenticated', 'NOT_AUTHENTICATED')
+      }
+
+      const parsedData = studentUpdateProfileSchema.parse(req.body) as StudentUpdateProfileInput
+
+      const student = await StudentService.updateStudentProfile(userId, {
+        name: parsedData.name,
+        gender: parsedData.gender,
+        dateOfBirth: parsedData.date_of_birth ? new Date(parsedData.date_of_birth) : undefined,
+        guardianName: parsedData.guardian_name,
+        guardianPhone: parsedData.guardian_phone,
+        profilePictureUrl: parsedData.profile_picture_url,
+      })
+
+      res.json({
+        success: true,
+        message: 'Profile updated successfully',
+        data: {
+          student: {
+            id: student.id,
+            name: student.name,
+            gender: student.gender,
+            date_of_birth: student.date_of_birth,
+            profile_picture_url: student.profile_picture_url,
+            guardian_name: student.guardian_name,
+            guardian_phone: student.guardian_phone,
+            onboarding_status: student.onboarding_status,
+            updated_at: student.updated_at,
           },
         },
       })

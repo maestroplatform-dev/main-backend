@@ -6,7 +6,7 @@ import { SectionReviewController } from '../controllers/section-review.controlle
 import { SpecificPoliciesController } from '../controllers/specific-policies.controller'
 import { NotificationController } from '../controllers/notification.controller'
 import { bookingController } from '../controllers/booking.controller'
-import { authenticateUser, requireRole } from '../middleware/auth'
+import { authenticateTeacherUser, authenticateUser, requireRole } from '../middleware/auth'
 import { asyncHandler } from '../utils/asyncHandler'
 
 const router = Router()
@@ -17,21 +17,21 @@ const router = Router()
 // Onboarding endpoints (specific routes first)
 router.post(
   '/onboarding',
-  authenticateUser,
+  authenticateTeacherUser,
   requireRole('teacher'),
   asyncHandler(TeacherOnboardingController.completeOnboarding)
 )
 
 router.get(
   '/onboarding',
-  authenticateUser,
+  authenticateTeacherUser,
   requireRole('teacher'),
   asyncHandler(TeacherOnboardingController.getOnboardingData)
 )
 
 router.post(
   '/onboarding/process-background',
-  authenticateUser,
+  authenticateTeacherUser,
   requireRole('teacher'),
   asyncHandler(TeacherOnboardingController.processBackground)
 )
@@ -44,14 +44,14 @@ router.post(
 // Engagement preferences endpoints
 router.post(
   '/engagement-preferences',
-  authenticateUser,
+  authenticateTeacherUser,
   requireRole('teacher'),
   asyncHandler(TeacherOnboardingController.saveEngagementPreferences)
 )
 
 router.get(
   '/engagement-preferences',
-  authenticateUser,
+  authenticateTeacherUser,
   requireRole('teacher'),
   asyncHandler(TeacherOnboardingController.getEngagementPreferences)
 )
@@ -59,7 +59,7 @@ router.get(
 // Old onboarding route (kept for compatibility)
 router.post(
   '/onboard',
-  authenticateUser,
+  authenticateTeacherUser,
   requireRole('teacher'),
   asyncHandler(TeacherController.onboard)
 )
@@ -67,21 +67,21 @@ router.post(
 // Profile routes
 router.get(
   '/profile/me',
-  authenticateUser,
+  authenticateTeacherUser,
   requireRole('teacher'),
   asyncHandler(TeacherController.getOwnProfile)
 )
 
 router.put(
   '/profile',
-  authenticateUser,
+  authenticateTeacherUser,
   requireRole('teacher'),
   asyncHandler(TeacherController.updateProfile)
 )
 
 router.patch(
   '/profile/me',
-  authenticateUser,
+  authenticateTeacherUser,
   requireRole('teacher'),
   asyncHandler(TeacherController.updateProfile)
 )
@@ -89,28 +89,28 @@ router.patch(
 // Bank details routes
 router.get(
   '/bank-details',
-  authenticateUser,
+  authenticateTeacherUser,
   requireRole('teacher'),
   asyncHandler(TeacherController.getBankDetails)
 )
 
 router.get(
   '/earnings',
-  authenticateUser,
+  authenticateTeacherUser,
   requireRole('teacher'),
   asyncHandler(TeacherController.getEarnings)
 )
 
 router.post(
   '/bank-details',
-  authenticateUser,
+  authenticateTeacherUser,
   requireRole('teacher'),
   asyncHandler(TeacherController.saveBankDetails)
 )
 
 router.put(
   '/bank-details',
-  authenticateUser,
+  authenticateTeacherUser,
   requireRole('teacher'),
   asyncHandler(TeacherController.saveBankDetails)
 )
@@ -118,28 +118,28 @@ router.put(
 // Instrument/Pricing routes
 router.get(
   '/instruments',
-  authenticateUser,
+  authenticateTeacherUser,
   requireRole('teacher'),
   asyncHandler(TeacherController.getInstruments)
 )
 
 router.post(
   '/instruments',
-  authenticateUser,
+  authenticateTeacherUser,
   requireRole('teacher'),
   asyncHandler(TeacherController.createInstrument)
 )
 
 router.post(
   '/instruments/generate-pointers',
-  authenticateUser,
+  authenticateTeacherUser,
   requireRole('teacher'),
   asyncHandler(TeacherController.generateInstrumentPointers)
 )
 
 router.get(
   '/instruments/pointer-status/:requestId',
-  authenticateUser,
+  authenticateTeacherUser,
   requireRole('teacher'),
   asyncHandler(TeacherController.getInstrumentPointerStatus)
 )
@@ -151,14 +151,14 @@ router.post(
 
 router.put(
   '/instruments/:id',
-  authenticateUser,
+  authenticateTeacherUser,
   requireRole('teacher'),
   asyncHandler(TeacherController.updateInstrument)
 )
 
 router.delete(
   '/instruments/:id',
-  authenticateUser,
+  authenticateTeacherUser,
   requireRole('teacher'),
   asyncHandler(TeacherController.deleteInstrument)
 )
@@ -166,7 +166,7 @@ router.delete(
 // Profile completion and review routes
 router.get(
   '/profile-completion',
-  authenticateUser,
+  authenticateTeacherUser,
   requireRole('teacher'),
   asyncHandler(TeacherController.getProfileCompletionStatus)
 )
@@ -174,21 +174,21 @@ router.get(
 // Section review routes
 router.get(
   '/section-reviews',
-  authenticateUser,
+  authenticateTeacherUser,
   requireRole('teacher'),
   asyncHandler(SectionReviewController.getAllStatuses)
 )
 
 router.get(
   '/section-reviews/:section',
-  authenticateUser,
+  authenticateTeacherUser,
   requireRole('teacher'),
   asyncHandler(SectionReviewController.getSectionStatus)
 )
 
 router.post(
   '/section-reviews/:section/submit',
-  authenticateUser,
+  authenticateTeacherUser,
   requireRole('teacher'),
   asyncHandler(SectionReviewController.submitForReview)
 )
@@ -196,28 +196,28 @@ router.post(
 // Specific policies routes
 router.get(
   '/specific-policies',
-  authenticateUser,
+  authenticateTeacherUser,
   requireRole('teacher'),
   asyncHandler(SpecificPoliciesController.getSpecificPolicies)
 )
 
 router.put(
   '/specific-policies',
-  authenticateUser,
+  authenticateTeacherUser,
   requireRole('teacher'),
   asyncHandler(SpecificPoliciesController.saveSpecificPolicies)
 )
 
 router.post(
   '/specific-policies/submit',
-  authenticateUser,
+  authenticateTeacherUser,
   requireRole('teacher'),
   asyncHandler(SpecificPoliciesController.submitForReview)
 )
 
 router.get(
   '/specific-policies/review-status',
-  authenticateUser,
+  authenticateTeacherUser,
   requireRole('teacher'),
   asyncHandler(SpecificPoliciesController.getReviewStatus)
 )
@@ -225,28 +225,28 @@ router.get(
 // Notification routes
 router.get(
   '/notifications',
-  authenticateUser,
+  authenticateTeacherUser,
   requireRole('teacher'),
   asyncHandler(NotificationController.getNotifications)
 )
 
 router.get(
   '/notifications/unread-count',
-  authenticateUser,
+  authenticateTeacherUser,
   requireRole('teacher'),
   asyncHandler(NotificationController.getUnreadCount)
 )
 
 router.patch(
   '/notifications/read-all',
-  authenticateUser,
+  authenticateTeacherUser,
   requireRole('teacher'),
   asyncHandler(NotificationController.markAllAsRead)
 )
 
 router.patch(
   '/notifications/:id/read',
-  authenticateUser,
+  authenticateTeacherUser,
   requireRole('teacher'),
   asyncHandler(NotificationController.markAsRead)
 )
@@ -259,7 +259,7 @@ router.patch(
 // Add a single slot for a specific date
 router.post(
   '/availability/slot',
-  authenticateUser,
+  authenticateTeacherUser,
   requireRole('teacher'),
   asyncHandler(TeacherAvailabilityController.addSlot)
 )
@@ -267,7 +267,7 @@ router.post(
 // Add multiple slots at once
 router.post(
   '/availability/slots',
-  authenticateUser,
+  authenticateTeacherUser,
   requireRole('teacher'),
   asyncHandler(TeacherAvailabilityController.addBulkSlots)
 )
@@ -275,7 +275,7 @@ router.post(
 // Replace all slots for a specific date
 router.put(
   '/availability/date',
-  authenticateUser,
+  authenticateTeacherUser,
   requireRole('teacher'),
   asyncHandler(TeacherAvailabilityController.replaceSlotsForDate)
 )
@@ -283,7 +283,7 @@ router.put(
 // Get own slots (with optional date range query params)
 router.get(
   '/availability/me',
-  authenticateUser,
+  authenticateTeacherUser,
   requireRole('teacher'),
   asyncHandler(TeacherAvailabilityController.getMySlots)
 )
@@ -291,21 +291,21 @@ router.get(
 // Unavailable dates management (must come BEFORE /:id routes)
 router.post(
   '/availability/unavailable',
-  authenticateUser,
+  authenticateTeacherUser,
   requireRole('teacher'),
   asyncHandler(TeacherAvailabilityController.markUnavailable)
 )
 
 router.get(
   '/availability/unavailable',
-  authenticateUser,
+  authenticateTeacherUser,
   requireRole('teacher'),
   asyncHandler(TeacherAvailabilityController.getUnavailableDates)
 )
 
 router.delete(
   '/availability/unavailable/:date',
-  authenticateUser,
+  authenticateTeacherUser,
   requireRole('teacher'),
   asyncHandler(TeacherAvailabilityController.removeUnavailable)
 )
@@ -313,7 +313,7 @@ router.delete(
 // Delete all slots for a specific date
 router.delete(
   '/availability/date/:date',
-  authenticateUser,
+  authenticateTeacherUser,
   requireRole('teacher'),
   asyncHandler(TeacherAvailabilityController.deleteSlotsForDate)
 )
@@ -321,7 +321,7 @@ router.delete(
 // Calendar view (availability + bookings)
 router.get(
   '/calendar',
-  authenticateUser,
+  authenticateTeacherUser,
   requireRole('teacher'),
   asyncHandler(TeacherAvailabilityController.getCalendar)
 )
@@ -329,21 +329,21 @@ router.get(
 // Single slot operations (parameterized routes come LAST)
 router.get(
   '/availability/:id',
-  authenticateUser,
+  authenticateTeacherUser,
   requireRole('teacher'),
   asyncHandler(TeacherAvailabilityController.getSlot)
 )
 
 router.put(
   '/availability/:id',
-  authenticateUser,
+  authenticateTeacherUser,
   requireRole('teacher'),
   asyncHandler(TeacherAvailabilityController.updateSlot)
 )
 
 router.delete(
   '/availability/:id',
-  authenticateUser,
+  authenticateTeacherUser,
   requireRole('teacher'),
   asyncHandler(TeacherAvailabilityController.deleteSlot)
 )

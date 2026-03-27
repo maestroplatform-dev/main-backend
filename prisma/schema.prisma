@@ -811,9 +811,11 @@ model password_reset_otps {
 model teacher_bank_details {
   id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   teacher_id          String   @unique @db.Uuid
-  bank_name           String
-  account_holder_name String
-  account_number      String
+  payout_method       String   @default("BANK")
+  bank_name           String?
+  account_holder_name String?
+  account_number      String?
+  upi_id              String?
   gst_number          String?
   ifsc_code           String?
   verified            Boolean  @default(false)

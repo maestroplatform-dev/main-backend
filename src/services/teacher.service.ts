@@ -860,9 +860,11 @@ export class TeacherService {
 
   // Save/update teacher bank details
   static async saveBankDetails(teacherId: string, data: {
-    bank_name: string
-    account_holder_name: string
-    account_number: string
+    payout_method: 'BANK' | 'UPI'
+    bank_name: string | null
+    account_holder_name: string | null
+    account_number: string | null
+    upi_id: string | null
     gst_number: string | null
     ifsc_code: string | null
   }) {
@@ -875,25 +877,33 @@ export class TeacherService {
       throw new AppError(404, 'Teacher not found', 'TEACHER_NOT_FOUND')
     }
 
-    // Upsert bank details
+    const updateData = {
+      payout_method: data.payout_method,
+      bank_name: data.bank_name,
+      account_holder_name: data.account_holder_name,
+      account_number: data.account_number,
+      upi_id: data.upi_id,
+      gst_number: data.gst_number,
+      ifsc_code: data.ifsc_code,
+      updated_at: new Date(),
+    }
+
+    const createData = {
+      teacher_id: teacherId,
+      payout_method: data.payout_method,
+      bank_name: data.bank_name,
+      account_holder_name: data.account_holder_name,
+      account_number: data.account_number,
+      upi_id: data.upi_id,
+      gst_number: data.gst_number,
+      ifsc_code: data.ifsc_code,
+    }
+
+    // Upsert payout details. Cast is temporary-safe until prisma client is regenerated from updated schema.
     const bankDetails = await prisma.teacher_bank_details.upsert({
       where: { teacher_id: teacherId },
-      update: {
-        bank_name: data.bank_name,
-        account_holder_name: data.account_holder_name,
-        account_number: data.account_number,
-        gst_number: data.gst_number,
-        ifsc_code: data.ifsc_code,
-        updated_at: new Date(),
-      },
-      create: {
-        teacher_id: teacherId,
-        bank_name: data.bank_name,
-        account_holder_name: data.account_holder_name,
-        account_number: data.account_number,
-        gst_number: data.gst_number,
-        ifsc_code: data.ifsc_code,
-      },
+      update: updateData as any,
+      create: createData as any,
     })
 
     return bankDetails

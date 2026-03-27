@@ -4,15 +4,27 @@
 CREATE TABLE IF NOT EXISTS public.teacher_bank_details (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     teacher_id UUID NOT NULL UNIQUE REFERENCES public.teachers(id) ON DELETE CASCADE,
-    bank_name VARCHAR(255) NOT NULL,
-    account_holder_name VARCHAR(255) NOT NULL,
-    account_number VARCHAR(50) NOT NULL,
+    payout_method VARCHAR(10) NOT NULL DEFAULT 'BANK',
+    bank_name VARCHAR(255),
+    account_holder_name VARCHAR(255),
+    account_number VARCHAR(50),
+    upi_id VARCHAR(255),
     gst_number VARCHAR(20),
     ifsc_code VARCHAR(20),
     verified BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+ALTER TABLE public.teacher_bank_details
+    DROP CONSTRAINT IF EXISTS teacher_bank_details_payout_method_check;
+
+ALTER TABLE public.teacher_bank_details
+    ADD CONSTRAINT teacher_bank_details_payout_method_check CHECK (
+        (payout_method = 'BANK' AND bank_name IS NOT NULL AND account_holder_name IS NOT NULL AND account_number IS NOT NULL)
+        OR
+        (payout_method = 'UPI' AND upi_id IS NOT NULL)
+    );
 
 -- Add RLS policies
 ALTER TABLE public.teacher_bank_details ENABLE ROW LEVEL SECURITY;

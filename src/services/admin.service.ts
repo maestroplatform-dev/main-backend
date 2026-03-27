@@ -504,9 +504,11 @@ export class AdminService {
           teacher_bank_details: {
             select: {
               id: true,
+              payout_method: true,
               bank_name: true,
               account_holder_name: true,
               account_number: true,
+              upi_id: true,
               gst_number: true,
               ifsc_code: true,
               verified: true,
@@ -801,9 +803,11 @@ export class AdminService {
       where: { teacher_id: teacherId },
       select: {
         id: true,
+        payout_method: true,
         bank_name: true,
         account_holder_name: true,
         account_number: true,
+        upi_id: true,
         gst_number: true,
         ifsc_code: true,
         verified: true,
@@ -1001,9 +1005,11 @@ export class AdminService {
         },
         teacher_bank_details: {
           select: {
+            payout_method: true,
             bank_name: true,
             account_holder_name: true,
             account_number: true,
+            upi_id: true,
             verified: true
           }
         },
@@ -1070,8 +1076,10 @@ export class AdminService {
           active_packages: teacher.purchased_packages.length,
           has_bank_details: hasBankDetailsSetup,
           bank_verified: bankVerified,
+          payout_method: teacher.teacher_bank_details?.payout_method || null,
           bank_name: teacher.teacher_bank_details?.bank_name || null,
-          account_holder: teacher.teacher_bank_details?.account_holder_name || null
+          account_holder: teacher.teacher_bank_details?.account_holder_name || null,
+          upi_id: teacher.teacher_bank_details?.upi_id || null,
         }
       })
       .filter(t => {

@@ -158,28 +158,64 @@ export class TeacherController {
 
   // POST/PUT /api/v1/teachers/bank-details
   static async saveBankDetails(req: AuthRequest, res: Response) {
-    const { bank_name, account_holder_name, account_number, gst_number, ifsc_code } = req.body
+    const {
+      payout_method,
+      bank_name,
+      account_holder_name,
+      account_number,
+      upi_id,
+      gst_number,
+      ifsc_code,
+    } = req.body
 
-    if (!bank_name || !account_holder_name || !account_number) {
+    const normalizedMethod =
+      payout_method === 'UPI'
+        ? 'UPI'
+        : payout_method === 'BANK'
+        ? 'BANK'
+        : upi_id
+        ? 'UPI'
+        : 'BANK'
+
+    if (normalizedMethod === 'UPI') {
+      if (!upi_id) {
+        res.status(400).json({
+          success: false,
+          error: 'upi_id is required when payout_method is UPI',
+        })
+        return
+      }
+
+      const upiPattern = /^[a-zA-Z0-9._-]{2,}@[a-zA-Z]{2,}$/
+      if (!upiPattern.test(String(upi_id).trim())) {
+        res.status(400).json({
+          success: false,
+          error: 'Please provide a valid UPI ID',
+        })
+        return
+      }
+    } else if (!bank_name || !account_holder_name || !account_number) {
       res.status(400).json({
         success: false,
-        error: 'bank_name, account_holder_name, and account_number are required',
+        error: 'bank_name, account_holder_name, and account_number are required when payout_method is BANK',
       })
       return
     }
 
     const bankDetails = await TeacherService.saveBankDetails(req.user!.id, {
-      bank_name,
-      account_holder_name,
-      account_number,
+      payout_method: normalizedMethod,
+      bank_name: normalizedMethod === 'BANK' ? bank_name : null,
+      account_holder_name: normalizedMethod === 'BANK' ? account_holder_name : null,
+      account_number: normalizedMethod === 'BANK' ? account_number : null,
+      upi_id: normalizedMethod === 'UPI' ? String(upi_id).trim() : null,
       gst_number: gst_number || null,
-      ifsc_code: ifsc_code || null,
+      ifsc_code: normalizedMethod === 'BANK' ? ifsc_code || null : null,
     })
 
     res.json({
       success: true,
       data: bankDetails,
-      message: 'Bank details saved successfully',
+      message: 'Payout details saved successfully',
     })
   }
 

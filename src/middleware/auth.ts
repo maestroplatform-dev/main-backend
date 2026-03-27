@@ -132,6 +132,66 @@ export async function authenticateStudentUser(
   }
 }
 
+export async function authenticateTeacherUser(
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+) {
+  try {
+    const user = await validateBearerUser(req)
+
+    let profile = await prisma.profiles.findUnique({
+      where: { id: user.id },
+    })
+
+    if (!profile) {
+      const fallbackName =
+        (user.user_metadata?.name as string | undefined) ||
+        (user.user_metadata?.full_name as string | undefined) ||
+        (user.email ? user.email.split('@')[0] : 'Teacher')
+
+      profile = await prisma.profiles.create({
+        data: {
+          id: user.id,
+          name: fallbackName,
+          role: 'teacher',
+          is_active: true,
+        },
+      })
+
+      logger.warn(
+        { userId: user.id, email: user.email },
+        'Auto-provisioned missing profile for teacher user'
+      )
+    }
+
+    if (!profile.is_active) {
+      throw new AppError(403, 'User account is inactive', 'USER_INACTIVE')
+    }
+
+    if (profile.role !== 'teacher') {
+      throw new AppError(403, 'Teacher access required', 'FORBIDDEN')
+    }
+
+    await prisma.teachers.upsert({
+      where: { id: user.id },
+      update: {
+        name: profile.name,
+        updated_at: new Date(),
+      },
+      create: {
+        id: user.id,
+        name: profile.name,
+      },
+    })
+
+    req.user = { id: user.id, email: user.email!, role: profile.role }
+    next()
+  } catch (error) {
+    next(error)
+  }
+}
+
 export function requireRole(...roles: string[]) {
   return (req: AuthRequest, res: Response, next: NextFunction) => {
     if (!req.user || !roles.includes(req.user.role)) {
